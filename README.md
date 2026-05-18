@@ -2,12 +2,12 @@
 
 Python monorepo for a Telegram dental clinic administrative assistant MVP.
 
-Current state: Milestone 0 foundation only. Telegram handlers, database models, LangGraph flows, speech providers, and external API integrations are intentionally not implemented yet.
+Current implementation includes the infrastructure foundation, database schema/repositories, and Telegram webhook base with language selection. LangGraph flows, speech providers, and external API integrations are intentionally not implemented yet.
 
 ## Stack
 
 - Python 3.12
-- FastAPI HTTP entrypoint for health checks and future Telegram webhook
+- FastAPI HTTP entrypoint for health checks and Telegram webhook
 - PostgreSQL 16
 - Docker Compose
 - Pydantic Settings
@@ -65,6 +65,18 @@ Run repository tests locally from `apps/bot` after installing dev dependencies:
 pip install -e ".[dev]"
 pytest
 ```
+
+## Telegram Webhook
+
+The webhook endpoint is configured by `TELEGRAM_WEBHOOK_PATH` and defaults to:
+
+```text
+/telegram/webhook
+```
+
+Production startup registers the webhook only when `APP_ENV=prod` and `TELEGRAM_BOT_TOKEN` is configured. Local development can still receive webhook requests through a tunnel or dev domain.
+
+Telegram webhook requests are checked against `TELEGRAM_WEBHOOK_SECRET` using the `X-Telegram-Bot-Api-Secret-Token` header when the secret is configured.
 
 ## Human Owner TODO
 

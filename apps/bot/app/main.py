@@ -7,6 +7,11 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.logging import configure_logging
+from app.telegram.webhook import (
+    register_telegram_webhook_route,
+    setup_telegram,
+    shutdown_telegram,
+)
 
 configure_logging()
 
@@ -15,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     logger.info(
         "bot_http_app_started",
         extra={
@@ -24,7 +29,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             "telegram_webhook_path": settings.telegram_webhook_path,
         },
     )
-    yield
+    await setup_telegram(fastapi_app)
+    try:
+        yield
+    finally:
+        await shutdown_telegram(fastapi_app)
 
 
 app = FastAPI(
@@ -32,6 +41,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+register_telegram_webhook_route(app)
 
 
 @app.get("/health")
