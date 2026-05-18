@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_env: Literal["dev", "test", "prod"] = "dev"
     app_base_url: str = "http://localhost:8000"
     app_timezone: str = "Asia/Tashkent"
+    speech_temp_dir: str = "/tmp/dental-bot-audio"
 
     telegram_bot_token: SecretStr | None = None
     telegram_webhook_secret: SecretStr | None = None
@@ -35,12 +36,33 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr | None = None
+    openai_base_url: str | None = None
     openai_text_model: str = "gpt-4.1-mini"
-    openai_stt_model: str = "gpt-4o-mini-transcribe"
+    openai_stt_model: str = "gpt-4o-transcribe"
+    openai_stt_language: str = "ru"
+    openai_stt_response_format: str = "json"
+    openai_stt_timeout_ms: int = 60000
+    openai_stt_max_audio_size_mb: int = 25
+    openai_stt_prompt: str = ""
     openai_tts_model: str = "gpt-4o-mini-tts"
+    openai_tts_voice: str = "marin"
+    openai_tts_fallback_voice: str = "cedar"
+    openai_tts_response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = (
+        "mp3"
+    )
+    openai_tts_timeout_ms: int = 60000
+    openai_tts_max_chars: int = 4096
+    openai_tts_speed: float = 1.0
+    openai_tts_instructions: str = ""
 
     muxlisa_api_key: SecretStr | None = None
-    muxlisa_base_url: str | None = None
+    muxlisa_base_url: str | None = "https://service.muxlisa.uz"
+    muxlisa_stt_timeout_ms: int = 60000
+    muxlisa_tts_timeout_ms: int = 60000
+    muxlisa_max_audio_size_mb: int = 5
+    muxlisa_max_audio_duration_sec: int = 60
+    muxlisa_tts_max_chars: int = 512
+    muxlisa_tts_speaker: int = 1
 
     google_calendar_id: str | None = None
     google_service_account_json_path: str = "/run/secrets/google_service_account.json"

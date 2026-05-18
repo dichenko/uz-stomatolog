@@ -44,8 +44,8 @@ Do not try to implement the entire project in one large step.
   Completed in commit `0cc076a` and pushed to `origin/main`.
 - [x] Milestone 3 - Clinic Knowledge Base and Text FAQ.
   Completed in commit `787027a` and pushed to `origin/main`.
-- [ ] Milestone 4 - Speech Modules.
-- [ ] Milestone 5 - LangGraph Controlled Flow.
+- [x] Milestone 4 - Speech Modules.
+- [x] Milestone 5 - LangGraph Controlled Flow.
 - [ ] Milestone 6 - Medical Safety and Escalation.
 - [ ] Milestone 7 - Google Calendar Integration.
 - [ ] Milestone 8 - Booking Flow.
@@ -299,6 +299,23 @@ Bot can answer administrative questions from clinic knowledge base.
 
 ## Milestone 4 — Speech Modules
 
+**Status:** Done.
+
+Implemented:
+
+- Speech provider interfaces and typed STT/TTS result models.
+- OpenAI STT/TTS provider for Russian and English.
+- Muxlisa STT/TTS provider for Uzbek.
+- Mock speech provider for tests.
+- Telegram voice handler that downloads voice files, transcribes them, routes text through the existing FAQ flow, replies with text plus generated audio, and deletes temporary files.
+- Temporary audio helpers, file size validation, Muxlisa WAV conversion helper, retry handling for retryable provider failures, and localized voice error messages.
+- `.env.example` entries for OpenAI and Muxlisa speech settings.
+
+Verified:
+
+- Targeted lint for changed speech/Telegram files passed.
+- Test suite passed with mocked providers: `17 passed`.
+
 ### Goal
 
 Support voice input and voice output.
@@ -341,6 +358,22 @@ class TextToSpeechProvider:
 ---
 
 ## Milestone 5 — LangGraph Controlled Flow
+
+**Status:** Done.
+
+Implemented:
+
+- Added graph package with typed `BotState`, intent classifier, route nodes, and LangGraph compilation.
+- Connected text and voice Telegram handlers to `run_bot_graph`; incoming DB message IDs now feed `execution_runs`.
+- Added controlled routes for admin FAQ, booking start, cancellation placeholder, rescheduling placeholder, emergency/escalation placeholder, and fallback.
+- Added execution run start/finish persistence with graph input, graph output, intent, status, duration, and tool-call metadata.
+- Added node-level structured logging for key graph nodes.
+- Added graph tests for intent classification, FAQ flow, booking start, medical safety, and execution run persistence.
+
+Verified:
+
+- Targeted lint for graph and Telegram adapter files passed.
+- Test suite passed: `21 passed`.
 
 ### Goal
 

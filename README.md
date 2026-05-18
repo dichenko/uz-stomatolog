@@ -2,7 +2,7 @@
 
 Python monorepo for a Telegram dental clinic administrative assistant MVP.
 
-Current implementation includes the infrastructure foundation, database schema/repositories, Telegram webhook base with language selection, and a constrained clinic knowledge FAQ. LangGraph flows, speech providers, and external API integrations are intentionally not implemented yet.
+Current implementation includes the infrastructure foundation, database schema/repositories, Telegram webhook base with language selection, constrained clinic knowledge FAQ, and speech provider modules for Telegram voice input/output. LangGraph flows and calendar booking flows are intentionally not implemented yet.
 
 ## Stack
 
@@ -90,10 +90,20 @@ apps/bot/app/clinic_knowledge/en.md
 
 On startup the app loads these files into `clinic_knowledge` if the table is empty. FAQ answers are constrained to the knowledge base; unknown questions receive a callback/admin clarification message instead of invented details.
 
+## Speech
+
+Voice messages are handled through isolated speech providers:
+
+- Russian and English use OpenAI STT/TTS.
+- Uzbek uses Muxlisa STT/TTS.
+- Tests can use `MockSpeechProvider` without external API keys.
+
+Temporary audio files are written to `SPEECH_TEMP_DIR` and deleted after transcription, TTS generation, and Telegram sending. OpenAI and Muxlisa API keys must stay in `.env`; they are never logged or sent to clients.
+
 ## Human Owner TODO
 
-- Provide final Muxlisa API documentation and credentials.
-- Choose exact OpenAI text/STT/TTS models.
+- Provide final Muxlisa credentials.
+- Confirm exact OpenAI text/STT/TTS model choices after real voice QA.
 - Configure Google Calendar service account.
 - Provide real admin Telegram group ID.
 - Provide final clinic knowledge base text in RU/UZ/EN.

@@ -6,7 +6,11 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import Conversation, User
-from app.db.repositories import ConversationRepository, MessageRepository, UserRepository
+from app.db.repositories import (
+    ConversationRepository,
+    MessageRepository,
+    UserRepository,
+)
 
 
 class PersistenceMiddleware(BaseMiddleware):
@@ -56,12 +60,18 @@ class PersistenceMiddleware(BaseMiddleware):
                 telegram_chat_id=event.chat.id,
             )
             message_text = event.text or event.caption
-            await MessageRepository(session).save_message(
+            if event.voice is not None:
+                message_type = "voice"
+            elif event.text is not None:
+                message_type = "text"
+            else:
+                message_type = "system"
+            incoming_message = await MessageRepository(session).save_message(
                 user_id=user.id,
                 conversation_id=conversation.id,
                 telegram_message_id=event.message_id,
                 direction="in",
-                message_type="text" if event.text else "system",
+                message_type=message_type,
                 language=user.preferred_language,
                 text=message_text,
                 raw_payload=event.model_dump(mode="json", exclude_none=True),
@@ -69,6 +79,7 @@ class PersistenceMiddleware(BaseMiddleware):
             )
             data["db_user"] = user
             data["db_conversation"] = conversation
+            data["db_incoming_message"] = incoming_message
             return
 
         if isinstance(event, CallbackQuery):
@@ -93,7 +104,7 @@ class PersistenceMiddleware(BaseMiddleware):
                 if event.message is not None and hasattr(event.message, "message_id")
                 else None
             )
-            await MessageRepository(session).save_message(
+            incoming_message = await MessageRepository(session).save_message(
                 user_id=user.id,
                 conversation_id=conversation.id,
                 telegram_message_id=telegram_message_id,
@@ -106,6 +117,7 @@ class PersistenceMiddleware(BaseMiddleware):
             )
             data["db_user"] = user
             data["db_conversation"] = conversation
+            data["db_incoming_message"] = incoming_message
 
 
 async def save_outgoing_message(
@@ -117,6 +129,7 @@ async def save_outgoing_message(
     text: str,
     language: str | None,
     trace_id: str,
+    message_type: str = "text",
     raw_payload: dict[str, Any] | None = None,
 ) -> None:
     await MessageRepository(session).save_message(
@@ -124,7 +137,7 @@ async def save_outgoing_message(
         conversation_id=conversation.id,
         telegram_message_id=telegram_message_id,
         direction="out",
-        message_type="text",
+        message_type=message_type,
         language=language,
         text=text,
         raw_payload=raw_payload,

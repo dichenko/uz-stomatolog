@@ -1,0 +1,132 @@
+from sqlalchemy import select
+
+from app.db.models import ExecutionRun
+from app.db.repositories import (
+    ConversationRepository,
+    MessageRepository,
+    UserRepository,
+)
+from app.graph import run_bot_graph
+from app.graph.intents import classify_intent_text
+from app.services.clinic_knowledge import load_clinic_knowledge_if_empty
+
+
+def test_intent_classifier_detects_core_flows():
+    assert classify_intent_text("How much does cleaning cost?") == "admin_faq"
+    assert classify_intent_text("I want to book an appointment") == "book_appointment"
+    assert classify_intent_text("Cancel my appointment") == "cancel_appointment"
+    assert classify_intent_text("What medicine should I take?") == "medical_question"
+
+
+async def test_graph_answers_faq_and_persists_execution_run(session, monkeypatch):
+    async def no_openai_answer(**_kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.faq._try_openai_answer", no_openai_answer)
+
+    await load_clinic_knowledge_if_empty(session)
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1001,
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1001,
+    )
+    message = await MessageRepository(session).save_message(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        telegram_message_id=1,
+        direction="in",
+        message_type="text",
+        language="en",
+        text="How much does cleaning cost?",
+        trace_id="graph-trace-1",
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-1",
+        telegram_chat_id=1001,
+        input_text="How much does cleaning cost?",
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+        input_message_id=message.id,
+    )
+
+    execution_run = (
+        await session.execute(
+            select(ExecutionRun).where(ExecutionRun.trace_id == "graph-trace-1")
+        )
+    ).scalar_one()
+
+    assert result.intent == "admin_faq"
+    assert result.safety_status == "safe"
+    assert "350,000 UZS" in result.final_response_text
+    assert execution_run.status == "success"
+    assert execution_run.input_message_id == message.id
+    assert execution_run.intent == "admin_faq"
+
+
+async def test_graph_starts_booking_controlled_flow(session):
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1002,
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1002,
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-2",
+        telegram_chat_id=1002,
+        input_text="I want to book a cleaning",
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+    )
+
+    assert result.intent == "book_appointment"
+    assert result.metadata["service_type"] == "cleaning"
+    assert result.metadata["doctor_type"] == "therapist"
+    assert result.metadata["missing_fields"] == ["patient_name", "phone"]
+    assert "patient" in result.final_response_text.casefold()
+
+
+async def test_graph_refuses_medical_advice(session, monkeypatch):
+    async def no_openai_answer(**_kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.faq._try_openai_answer", no_openai_answer)
+
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1003,
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1003,
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-3",
+        telegram_chat_id=1003,
+        input_text="My tooth hurts, what medicine should I take?",
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+    )
+
+    assert result.intent == "medical_question"
+    assert result.safety_status == "medical_advice"
+    assert "cannot provide medical advice" in result.final_response_text
