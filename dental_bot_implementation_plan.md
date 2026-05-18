@@ -34,9 +34,50 @@ Each stage must leave the project in a runnable state.
 
 Do not try to implement the entire project in one large step.
 
+### Current implementation status
+
+- [x] Milestone 0 - Repository and Infrastructure Skeleton.
+  Completed in commit `1e3b7db` and pushed to `origin/main`.
+- [x] Milestone 1 - Database Foundation.
+  Completed in commit `1e3b7db` and pushed to `origin/main`.
+- [x] Milestone 2 - Telegram Bot Base.
+  Completed in commit `0cc076a` and pushed to `origin/main`.
+- [x] Milestone 3 - Clinic Knowledge Base and Text FAQ.
+  Completed in commit `787027a` and pushed to `origin/main`.
+- [ ] Milestone 4 - Speech Modules.
+- [ ] Milestone 5 - LangGraph Controlled Flow.
+- [ ] Milestone 6 - Medical Safety and Escalation.
+- [ ] Milestone 7 - Google Calendar Integration.
+- [ ] Milestone 8 - Booking Flow.
+- [ ] Milestone 9 - Cancellation Flow.
+- [ ] Milestone 10 - Rescheduling Flow.
+- [ ] Milestone 11 - Reminder Worker.
+- [ ] Milestone 12 - Calendar Sync Worker.
+- [ ] Milestone 13 - Tracing and Observability.
+- [ ] Milestone 14 - GitHub Actions Deployment.
+- [ ] Milestone 15 - VPS and Caddy Integration.
+- [ ] Milestone 16 - Automated Tests.
+- [ ] Milestone 17 - Final MVP QA.
+
 ---
 
 ## Milestone 0 — Repository and Infrastructure Skeleton
+
+**Status:** Done.
+
+Implemented:
+
+- Monorepo structure with `apps/bot`, `infra`, `scripts`, `.github/workflows`.
+- Python 3.12 bot project with FastAPI health endpoint.
+- Dockerfile and Docker Compose for bot and PostgreSQL.
+- `.env.example`, README, Caddy example, deployment and webhook scripts.
+- Structured JSON logging foundation.
+
+Verified:
+
+- `docker compose -f infra/docker-compose.yml up -d --build`.
+- `GET /health` returns `{"status":"OK"}`.
+- Bot and PostgreSQL containers start successfully.
 
 ### Goal
 
@@ -98,6 +139,21 @@ dental-bot/
 
 ## Milestone 1 — Database Foundation
 
+**Status:** Done.
+
+Implemented:
+
+- Async SQLAlchemy session setup.
+- Alembic configuration and initial migration.
+- Tables: `users`, `user_phones`, `conversations`, `messages`, `appointments`, `appointment_history`, `clinic_knowledge`, `escalations`, `reminder_jobs`, `execution_runs`.
+- Repository layer for users, conversations, messages, appointments, clinic knowledge, escalations, reminders, and execution runs.
+- Basic repository CRUD tests.
+
+Verified:
+
+- `alembic upgrade head` creates all required tables in PostgreSQL.
+- Repository test suite passed.
+
 ### Goal
 
 Create DB connection, models and migrations.
@@ -139,6 +195,24 @@ Create DB connection, models and migrations.
 
 ## Milestone 2 — Telegram Bot Base
 
+**Status:** Done.
+
+Implemented:
+
+- aiogram dispatcher and Telegram webhook route at `/telegram/webhook`.
+- Telegram webhook secret validation.
+- `/start`, `/language`, `/help`, `/my_appointments`.
+- Inline language keyboard for Russian, Uzbek, and English.
+- Language persistence in DB.
+- Incoming and outgoing message persistence in DB.
+- `trace_id` per Telegram update.
+
+Verified:
+
+- Docker rebuild and app startup.
+- `/health` works after Telegram integration.
+- Telegram base tests passed.
+
 ### Goal
 
 Implement Telegram webhook bot with language selection.
@@ -173,6 +247,22 @@ Implement Telegram webhook bot with language selection.
 ---
 
 ## Milestone 3 — Clinic Knowledge Base and Text FAQ
+
+**Status:** Done.
+
+Implemented:
+
+- Clinic knowledge Markdown files: `ru.md`, `uz.md`, `en.md`.
+- Prompt files: `system_ru.md`, `system_uz.md`, `system_en.md`, `intent_classifier.md`, `safety_guard.md`, `appointment_summary.md`.
+- Startup loader that imports Markdown knowledge into `clinic_knowledge` when the table is empty.
+- `get_clinic_knowledge(language)`.
+- Constrained FAQ service that answers from knowledge base and refuses medical advice.
+- Unknown-question fallback that avoids invented details.
+
+Verified:
+
+- Startup loaded 3 `clinic_knowledge` records.
+- Full test suite passed: `13 passed`.
 
 ### Goal
 
@@ -901,4 +991,3 @@ The MVP is done when:
 19. Full message history is saved.
 20. Trace/logs allow debugging each execution.
 ```
-
