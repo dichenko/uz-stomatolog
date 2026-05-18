@@ -2,7 +2,7 @@
 
 Python monorepo for a Telegram dental clinic administrative assistant MVP.
 
-Current implementation includes the infrastructure foundation, database schema/repositories, and Telegram webhook base with language selection. LangGraph flows, speech providers, and external API integrations are intentionally not implemented yet.
+Current implementation includes the infrastructure foundation, database schema/repositories, Telegram webhook base with language selection, and a constrained clinic knowledge FAQ. LangGraph flows, speech providers, and external API integrations are intentionally not implemented yet.
 
 ## Stack
 
@@ -77,6 +77,18 @@ The webhook endpoint is configured by `TELEGRAM_WEBHOOK_PATH` and defaults to:
 Production startup registers the webhook only when `APP_ENV=prod` and `TELEGRAM_BOT_TOKEN` is configured. Local development can still receive webhook requests through a tunnel or dev domain.
 
 Telegram webhook requests are checked against `TELEGRAM_WEBHOOK_SECRET` using the `X-Telegram-Bot-Api-Secret-Token` header when the secret is configured.
+
+## Clinic Knowledge FAQ
+
+Initial clinic knowledge is stored in Markdown files:
+
+```text
+apps/bot/app/clinic_knowledge/ru.md
+apps/bot/app/clinic_knowledge/uz.md
+apps/bot/app/clinic_knowledge/en.md
+```
+
+On startup the app loads these files into `clinic_knowledge` if the table is empty. FAQ answers are constrained to the knowledge base; unknown questions receive a callback/admin clarification message instead of invented details.
 
 ## Human Owner TODO
 

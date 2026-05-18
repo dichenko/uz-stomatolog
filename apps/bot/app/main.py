@@ -4,9 +4,12 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
+from app.db.session import async_session_factory
 from app.logging import configure_logging
+from app.services.clinic_knowledge import load_clinic_knowledge_if_empty
 from app.telegram.webhook import (
     register_telegram_webhook_route,
     setup_telegram,
@@ -29,6 +32,17 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
             "telegram_webhook_path": settings.telegram_webhook_path,
         },
     )
+    try:
+        async with async_session_factory() as session:
+            loaded_knowledge_count = await load_clinic_knowledge_if_empty(session)
+            await session.commit()
+            if loaded_knowledge_count:
+                logger.info(
+                    "clinic_knowledge_loaded",
+                    extra={"loaded_knowledge_count": loaded_knowledge_count},
+                )
+    except SQLAlchemyError:
+        logger.exception("clinic_knowledge_load_skipped")
     await setup_telegram(fastapi_app)
     try:
         yield

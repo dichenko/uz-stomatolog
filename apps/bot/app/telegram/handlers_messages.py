@@ -3,6 +3,8 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Conversation, User
+from app.services.clinic_knowledge import get_clinic_knowledge
+from app.services.faq import generate_admin_faq_answer
 from app.telegram.keyboards import language_keyboard
 from app.telegram.persistence import save_outgoing_message
 from app.telegram.texts import normalize_language, text
@@ -34,7 +36,13 @@ async def fallback_text_handler(
         return
 
     language = normalize_language(db_user.preferred_language)
-    response_text = text("fallback", language)
+    knowledge = await get_clinic_knowledge(db_session, language)
+    faq_answer = await generate_admin_faq_answer(
+        question=message.text or "",
+        language=language,
+        knowledge=knowledge,
+    )
+    response_text = faq_answer.text
     sent = await message.answer(response_text)
     await save_outgoing_message(
         session=db_session,
@@ -44,4 +52,8 @@ async def fallback_text_handler(
         text=response_text,
         language=language,
         trace_id=trace_id,
+        raw_payload={
+            "faq_answered": faq_answer.answered,
+            "faq_source": faq_answer.source,
+        },
     )
