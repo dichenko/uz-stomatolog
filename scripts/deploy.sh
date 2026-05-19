@@ -18,11 +18,19 @@ echo "=== Starting services ==="
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 
 echo "=== Waiting for PostgreSQL ==="
-PG_USER="${POSTGRES_USER:-dental_bot}"
-PG_DB="${POSTGRES_DB:-dental_bot}"
-docker compose -f "$COMPOSE_FILE" exec -T bot \
-  sh -c "while ! pg_isready -h postgres -U \"$PG_USER\" -d \"$PG_DB\" 2>/dev/null; do sleep 2; done" || true
-sleep 3
+MAX_WAIT=30
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+  if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -q 2>/dev/null; then
+    echo "PostgreSQL ready after ${WAITED}s"
+    break
+  fi
+  sleep 2
+  WAITED=$((WAITED + 2))
+done
+if [ $WAITED -ge $MAX_WAIT ]; then
+  echo "Warning: PostgreSQL not ready after ${MAX_WAIT}s, proceeding anyway..."
+fi
 
 echo "=== Running DB migrations ==="
 docker compose -f "$COMPOSE_FILE" exec -T bot alembic upgrade head
