@@ -65,7 +65,7 @@ Do not try to implement the entire project in one large step.
 - [x] Milestone 13 - Tracing and Observability.
   Completed in commit `dabd504`.
 - [x] Milestone 14 - GitHub Actions Deployment.
-  Completed.
+  Completed in commit `e4d6291`.
 - [ ] Milestone 15 - VPS and Caddy Integration.
 - [ ] Milestone 16 - Automated Tests.
 - [ ] Milestone 17 - Final MVP QA.
