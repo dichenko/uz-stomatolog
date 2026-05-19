@@ -267,7 +267,7 @@ async def voice_handler(
                 language,
             )
             output_path = tts_result.file_path
-            audio = FSInputFile(output_path)
+            audio = FSInputFile(output_path, filename=f"voice.{tts_result.format}")
             sent_audio = await message.answer_audio(audio)
             await save_outgoing_message(
                 session=db_session,

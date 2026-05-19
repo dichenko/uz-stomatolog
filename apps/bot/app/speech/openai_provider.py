@@ -104,7 +104,7 @@ class OpenAISpeechProvider:
             model=self.settings.openai_tts_model,
             voice=self.settings.openai_tts_voice,
             input=text,
-            instructions=self.settings.openai_tts_instructions or None,
+            instructions=self.settings.openai_tts_instructions or "",
             response_format=response_format,
             speed=self.settings.openai_tts_speed,
         )
