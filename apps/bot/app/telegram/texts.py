@@ -7,9 +7,9 @@ DEFAULT_LANGUAGE: Language = "ru"
 
 
 LANGUAGE_LABELS: dict[Language, str] = {
-    "ru": "Русский",
-    "uz": "O'zbekcha",
-    "en": "English",
+    "ru": "\U0001F1F7\U0001F1FA Русский",
+    "uz": "\U0001F1FA\U0001F1FF O'zbekcha",
+    "en": "\U0001F1EC\U0001F1E7 English",
 }
 
 
