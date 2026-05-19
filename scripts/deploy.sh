@@ -2,6 +2,8 @@
 set -eu
 
 COMPOSE_FILE="infra/docker-compose.yml"
+MSG_SUCCESS="✅ Deploy <b>successful</b> on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+MSG_FAILED="❌ Deploy <b>FAILED</b> on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # Load .env if present
 if [ -f .env ]; then
@@ -11,8 +13,7 @@ if [ -f .env ]; then
 fi
 
 _notify() {
-  _status="$1"
-  _msg="$2"
+  _msg="$1"
   _token="${TELEGRAM_BOT_TOKEN:-}"
   _chat="${DEV_ADMIN_TG_ID:-}"
   if [ -n "$_token" ] && [ -n "$_chat" ]; then
@@ -24,7 +25,7 @@ _notify() {
   fi
 }
 
-trap '_notify "FAILED" "❌ Deploy <b>FAILED</b> on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"' ERR
+run_deploy() {
 
 echo "=== Pulling latest images and rebuilding ==="
 docker compose -f "$COMPOSE_FILE" pull --quiet 2>/dev/null || true
@@ -57,4 +58,16 @@ docker compose -f "$COMPOSE_FILE" ps
 echo "=== Recent logs ==="
 docker compose -f "$COMPOSE_FILE" logs --tail=50 bot
 
-_notify "OK" "✅ Deploy <b>successful</b> on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
+set +e
+run_deploy
+_exit_code=$?
+set -e
+
+if [ $_exit_code -eq 0 ]; then
+  _notify "$MSG_SUCCESS"
+else
+  _notify "$MSG_FAILED"
+  exit 1
+fi
