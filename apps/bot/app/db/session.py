@@ -12,7 +12,7 @@ from app.config import get_settings
 
 def create_engine(database_url: str | None = None) -> AsyncEngine:
     settings = get_settings()
-    url = database_url or settings.database_url.get_secret_value()
+    url = database_url or settings.database_url
     return create_async_engine(url, pool_pre_ping=True)
 
 

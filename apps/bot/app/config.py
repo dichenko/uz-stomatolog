@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,11 +29,19 @@ class Settings(BaseSettings):
     postgres_db: str = "dental_bot"
     postgres_user: str = "dental_bot"
     postgres_password: SecretStr | None = None
-    database_url: SecretStr = Field(
-        default=SecretStr(
-            "postgresql+asyncpg://dental_bot:password@postgres:5432/dental_bot"
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        password_value = (
+            self.postgres_password.get_secret_value()
+            if self.postgres_password is not None
+            else "password"
         )
-    )
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{password_value}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     openai_api_key: SecretStr | None = None
     openai_base_url: str | None = None
