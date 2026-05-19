@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ async def setup_telegram(app: FastAPI) -> None:
     settings = get_settings()
     app.state.telegram_bot = None
     app.state.telegram_dispatcher = None
+    app.state.polling_task = None
 
     token = (
         settings.telegram_bot_token.get_secret_value()
@@ -31,7 +33,19 @@ async def setup_telegram(app: FastAPI) -> None:
     app.state.telegram_bot = bot
     app.state.telegram_dispatcher = dispatcher
 
+    if settings.bot_mode == "polling":
+        app.state.telegram_webhook_url = None
+        await bot.delete_webhook(drop_pending_updates=True)
+        polling_task = asyncio.create_task(
+            _run_polling(bot, dispatcher),
+            name="telegram_polling",
+        )
+        app.state.polling_task = polling_task
+        logger.info("telegram_polling_started")
+        return
+
     webhook_url = f"{settings.app_base_url.rstrip('/')}{settings.telegram_webhook_path}"
+    app.state.telegram_webhook_url = webhook_url
     if settings.app_env == "prod":
         secret_token = (
             settings.telegram_webhook_secret.get_secret_value()
@@ -49,8 +63,23 @@ async def setup_telegram(app: FastAPI) -> None:
 
 async def shutdown_telegram(app: FastAPI) -> None:
     bot: Bot | None = app.state.telegram_bot
+    polling_task: asyncio.Task | None = app.state.polling_task
+    if polling_task is not None:
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("telegram_polling_stopped")
     if bot is not None:
         await bot.session.close()
+
+
+async def _run_polling(bot: Bot, dispatcher: Dispatcher) -> None:
+    try:
+        await dispatcher.start_polling(bot, handle_signals=False)
+    except asyncio.CancelledError:
+        pass
 
 
 def register_telegram_webhook_route(app: FastAPI) -> None:

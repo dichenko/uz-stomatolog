@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     telegram_webhook_secret: SecretStr | None = None
     telegram_webhook_path: str = "/telegram/webhook"
     admin_telegram_chat_id: str | None = None
+    bot_mode: Literal["webhook", "polling"] = "polling"
 
     postgres_host: str = "postgres"
     postgres_port: int = 5432
