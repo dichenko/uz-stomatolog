@@ -11,6 +11,8 @@ services:
       POSTGRES_PORT: 5432
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      - /run/secrets/google_service_account.json:/run/secrets/google_service_account.json:ro
     depends_on:
       postgres:
         condition: service_healthy
