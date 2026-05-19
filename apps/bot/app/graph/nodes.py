@@ -1,11 +1,14 @@
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Conversation, User
+from app.db.repositories import EscalationRepository
 from app.graph.intents import classify_intent_text
 from app.graph.state import BotState
+from app.services.admin_notify import send_admin_notification
 from app.services.clinic_knowledge import get_clinic_knowledge
 from app.services.faq import generate_admin_faq_answer
 from app.telegram.texts import Language, text
@@ -13,7 +16,13 @@ from app.telegram.texts import Language, text
 logger = logging.getLogger(__name__)
 
 
-def build_nodes(*, session: AsyncSession, user: User, conversation: Conversation):
+def build_nodes(
+    *,
+    session: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    admin_bot: Any | None = None,
+):
     async def load_user_context(state: BotState) -> dict[str, Any]:
         logger.info(
             "graph_node_started",
@@ -75,6 +84,16 @@ def build_nodes(*, session: AsyncSession, user: User, conversation: Conversation
             language=language,
             knowledge=knowledge,
         )
+        escalation_payload: dict[str, Any] = {}
+        if not answer.answered:
+            escalation_payload = await _create_escalation_and_notify(
+                state=state,
+                user=user,
+                conversation=conversation,
+                session=session,
+                admin_bot=admin_bot,
+                reason="unknown",
+            )
         return {
             "final_response_text": answer.text,
             "faq_answered": answer.answered,
@@ -82,7 +101,9 @@ def build_nodes(*, session: AsyncSession, user: User, conversation: Conversation
             "tool_calls": [
                 *state["tool_calls"],
                 {"tool": "get_clinic_knowledge", "status": "success"},
+                *escalation_payload.pop("tool_calls", []),
             ],
+            **escalation_payload,
         }
 
     async def start_booking(state: BotState) -> dict[str, Any]:
@@ -109,11 +130,18 @@ def build_nodes(*, session: AsyncSession, user: User, conversation: Conversation
     async def emergency_or_escalation(state: BotState) -> dict[str, Any]:
         language = state["preferred_language"]
         reason = state["intent"] or "unknown"
+        escalation_payload = await _create_escalation_and_notify(
+            state=state,
+            user=user,
+            conversation=conversation,
+            session=session,
+            admin_bot=admin_bot,
+            reason=reason,
+        )
+        has_phone = escalation_payload["escalation_phone"] is not None
         return {
-            "should_escalate": True,
-            "escalation_reason": reason,
-            "missing_fields": ["phone"],
-            "final_response_text": _escalation_text(language),
+            "final_response_text": _escalation_text(language, has_phone=has_phone),
+            **escalation_payload,
         }
 
     async def fallback(state: BotState) -> dict[str, Any]:
@@ -136,6 +164,106 @@ def build_nodes(*, session: AsyncSession, user: User, conversation: Conversation
     }
 
 
+async def _create_escalation_and_notify(
+    *,
+    state: BotState,
+    user: User,
+    conversation: Conversation,
+    session: AsyncSession,
+    admin_bot: Any | None,
+    reason: str,
+) -> dict[str, Any]:
+    phone = _extract_phone(state["input_text"])
+    escalation = await EscalationRepository(session).create(
+        user_id=user.id,
+        reason=reason,
+        summary=_build_escalation_summary(state),
+        phone=phone,
+    )
+    notification = await send_admin_notification(
+        bot=admin_bot,
+        message_text=_build_admin_notification_text(
+            escalation_id=escalation.id,
+            reason=reason,
+            state=state,
+            user=user,
+            conversation=conversation,
+            phone=phone,
+        ),
+    )
+    if notification.admin_chat_id is not None:
+        escalation.admin_chat_id = notification.admin_chat_id
+    if notification.admin_message_id is not None:
+        escalation.admin_message_id = notification.admin_message_id
+    await session.flush()
+
+    missing_fields = [] if phone else ["phone"]
+    return {
+        "should_escalate": True,
+        "escalation_reason": reason,
+        "escalation_id": escalation.id,
+        "escalation_phone": phone,
+        "missing_fields": missing_fields,
+        "admin_notification_sent": notification.sent,
+        "admin_message_id": notification.admin_message_id,
+        "tool_calls": [
+            {"tool": "create_escalation", "status": "success"},
+            {
+                "tool": "send_admin_notification",
+                "status": "success" if notification.sent else "skipped",
+            },
+        ],
+    }
+
+
+def _extract_phone(text_value: str) -> str | None:
+    match = re.search(r"(?:\+?\d[\d\s().-]{7,}\d)", text_value)
+    if match is None:
+        return None
+    return re.sub(r"[^\d+]", "", match.group(0))
+
+
+def _build_escalation_summary(state: BotState) -> str:
+    return (
+        f"Reason: {state['intent'] or 'unknown'}\n"
+        f"Safety: {state['safety_status'] or 'unknown'}\n"
+        f"Message: {state['input_text']}"
+    )
+
+
+def _build_admin_notification_text(
+    *,
+    escalation_id: int,
+    reason: str,
+    state: BotState,
+    user: User,
+    conversation: Conversation,
+    phone: str | None,
+) -> str:
+    username = f"@{user.telegram_username}" if user.telegram_username else "-"
+    return "\n".join(
+        [
+            "Escalation required",
+            "",
+            f"Escalation ID: {escalation_id}",
+            f"Reason: {reason}",
+            "",
+            "Patient:",
+            f"Telegram: {username} / id {user.telegram_user_id}",
+            f"Phone: {phone or '-'}",
+            f"Language: {state['preferred_language']}",
+            "",
+            "User message:",
+            state["input_text"],
+            "",
+            "Conversation summary:",
+            conversation.summary or "-",
+            "",
+            f"Trace ID: {state['trace_id']}",
+        ]
+    )
+
+
 def route_intent(state: BotState) -> str:
     intent = state["intent"]
     safety_status = state["safety_status"]
@@ -151,6 +279,8 @@ def route_intent(state: BotState) -> str:
         return "reschedule_appointment"
     if intent == "admin_faq":
         return "admin_faq"
+    if intent == "unknown":
+        return "emergency_or_escalation"
     return "fallback"
 
 
@@ -222,7 +352,13 @@ def _not_ready_text(language: Language, flow: str) -> str:
     return messages[flow][language]
 
 
-def _escalation_text(language: Language) -> str:
+def _escalation_text(language: Language, *, has_phone: bool) -> str:
+    if has_phone:
+        return {
+            "ru": "Передал ситуацию администратору. С вами свяжутся.",
+            "uz": "Vaziyatni administratorga yubordim. Siz bilan bog'lanishadi.",
+            "en": "I have passed this to an administrator. They will contact you.",
+        }[language]
     return {
         "ru": (
             "Передам ситуацию администратору. "

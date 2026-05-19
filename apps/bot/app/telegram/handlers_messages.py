@@ -290,6 +290,7 @@ async def _run_graph_for_message(
         preferred_language=normalize_language(language),
         telegram_profile=telegram_user.model_dump(mode="json") if telegram_user else {},
         input_message_id=db_incoming_message.id,
+        admin_bot=message.bot,
     )
 
 

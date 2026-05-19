@@ -46,8 +46,8 @@ Do not try to implement the entire project in one large step.
   Completed in commit `787027a` and pushed to `origin/main`.
 - [x] Milestone 4 - Speech Modules.
 - [x] Milestone 5 - LangGraph Controlled Flow.
-- [ ] Milestone 6 - Medical Safety and Escalation.
-- [ ] Milestone 7 - Google Calendar Integration.
+- [x] Milestone 6 - Medical Safety and Escalation.
+- [x] Milestone 7 - Google Calendar Integration.
 - [ ] Milestone 8 - Booking Flow.
 - [ ] Milestone 9 - Cancellation Flow.
 - [ ] Milestone 10 - Rescheduling Flow.
@@ -424,6 +424,23 @@ Implement the main controlled AI workflow.
 
 ## Milestone 6 — Medical Safety and Escalation
 
+**Status:** Done.
+
+Implemented:
+
+- Adding DB escalation creation, admin notification service, phone detection, and graph routes for emergency/unclear fallback cases.
+- Added `admin_notify` service and wired graph escalation nodes to create DB escalations and send Telegram admin summaries when `ADMIN_TELEGRAM_CHAT_ID` is configured.
+- Emergency, angry user, discount, non-standard service, and unknown FAQ cases now create `escalations`.
+- Admin summaries include escalation id, reason, Telegram user, phone when present, user message, conversation summary, and trace id.
+- The graph asks for phone only when the escalation message does not already contain one.
+- Medical advice requests still route through safety refusal and do not recommend medicines.
+- Added tests for emergency escalation with admin notification and unknown FAQ escalation without admin bot.
+
+Verified:
+
+- Targeted lint for safety/escalation files passed.
+- Test suite passed: `23 passed`.
+
 ### Goal
 
 Make the bot safe for administrative-only dental use.
@@ -464,6 +481,22 @@ Bot must answer approximately:
 ---
 
 ## Milestone 7 — Google Calendar Integration
+
+**Status:** Done.
+
+Implemented:
+
+- Adding Google Calendar service abstraction, event models, service account client factory, availability calculation, and mocked tests.
+- Added calendar package with Google service account client factory, event CRUD wrapper, event body formatting, Calendar-to-busy-event parsing, and availability slot rules.
+- Implemented service methods for list/get/create/update/cancel calendar events.
+- Event creation includes title, description, start/end timezone, and `extendedProperties.private` bot metadata.
+- Availability respects Monday-Saturday, 09:00-21:00, service durations, doctor capacity, two-cabinet capacity, and conservative unknown-event blocking.
+- Added mocked tests for Google Calendar CRUD payloads and availability conflict logic.
+
+Verified:
+
+- Targeted lint for calendar files passed.
+- Test suite passed: `28 passed`.
 
 ### Goal
 

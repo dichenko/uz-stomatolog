@@ -37,8 +37,11 @@ class BotState(TypedDict):
 
     should_escalate: bool
     escalation_reason: str | None
+    escalation_id: int | None
+    escalation_phone: str | None
 
     admin_notification_sent: bool
+    admin_message_id: int | None
     tool_calls: list[dict[str, Any]]
 
     faq_answered: NotRequired[bool]

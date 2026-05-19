@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 from sqlalchemy import select
 
-from app.db.models import ExecutionRun
+from app.config import Settings
+from app.db.models import Escalation, ExecutionRun
 from app.db.repositories import (
     ConversationRepository,
     MessageRepository,
@@ -9,6 +12,15 @@ from app.db.repositories import (
 from app.graph import run_bot_graph
 from app.graph.intents import classify_intent_text
 from app.services.clinic_knowledge import load_clinic_knowledge_if_empty
+
+
+class FakeAdminBot:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, str]] = []
+
+    async def send_message(self, *, chat_id: str, text: str):
+        self.messages.append({"chat_id": chat_id, "text": text})
+        return SimpleNamespace(message_id=777)
 
 
 def test_intent_classifier_detects_core_flows():
@@ -130,3 +142,94 @@ async def test_graph_refuses_medical_advice(session, monkeypatch):
     assert result.intent == "medical_question"
     assert result.safety_status == "medical_advice"
     assert "cannot provide medical advice" in result.final_response_text
+
+
+async def test_graph_creates_escalation_and_notifies_admin_for_emergency(
+    session,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.services.admin_notify.get_settings",
+        lambda: Settings(admin_telegram_chat_id="-100123"),
+    )
+    admin_bot = FakeAdminBot()
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1004,
+        telegram_username="ali",
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1004,
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-4",
+        telegram_chat_id=1004,
+        input_text="Emergency, bleeding after extraction, phone +998 90 123 45 67",
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+        admin_bot=admin_bot,
+    )
+    escalation = (
+        await session.execute(
+            select(Escalation).where(Escalation.id == result.metadata["escalation_id"])
+        )
+    ).scalar_one()
+
+    assert result.intent == "emergency"
+    assert result.should_escalate is True
+    assert result.metadata["admin_notification_sent"] is True
+    assert result.metadata["admin_message_id"] == 777
+    assert result.metadata["missing_fields"] == []
+    assert escalation.reason == "emergency"
+    assert escalation.phone == "+998901234567"
+    assert escalation.admin_chat_id == "-100123"
+    assert escalation.admin_message_id == 777
+    assert admin_bot.messages[0]["chat_id"] == "-100123"
+    assert "Escalation required" in admin_bot.messages[0]["text"]
+
+
+async def test_graph_escalates_unknown_faq_without_admin_bot(session, monkeypatch):
+    async def no_openai_answer(**_kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.faq._try_openai_answer", no_openai_answer)
+
+    await load_clinic_knowledge_if_empty(session)
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1005,
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1005,
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-5",
+        telegram_chat_id=1005,
+        input_text="Do you sell toothbrush subscriptions?",
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+    )
+    escalation = (
+        await session.execute(
+            select(Escalation).where(Escalation.id == result.metadata["escalation_id"])
+        )
+    ).scalar_one()
+
+    assert result.intent == "admin_faq"
+    assert result.should_escalate is True
+    assert result.metadata["escalation_reason"] == "unknown"
+    assert result.metadata["admin_notification_sent"] is False
+    assert result.metadata["missing_fields"] == ["phone"]
+    assert escalation.reason == "unknown"

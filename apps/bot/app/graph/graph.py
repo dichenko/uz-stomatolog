@@ -25,6 +25,7 @@ async def run_bot_graph(
     preferred_language: Language,
     telegram_profile: dict[str, Any],
     input_message_id: int | None = None,
+    admin_bot: Any | None = None,
 ) -> GraphResult:
     graph_input = _initial_state(
         trace_id=trace_id,
@@ -44,7 +45,12 @@ async def run_bot_graph(
         graph_input=_serializable_state(graph_input),
     )
     try:
-        graph = _compile_graph(session=session, user=user, conversation=conversation)
+        graph = _compile_graph(
+            session=session,
+            user=user,
+            conversation=conversation,
+            admin_bot=admin_bot,
+        )
         output: BotState = await graph.ainvoke(graph_input)
         await runs.finish(
             trace_id=trace_id,
@@ -65,8 +71,14 @@ def _compile_graph(
     session: AsyncSession,
     user: User,
     conversation: Conversation,
+    admin_bot: Any | None = None,
 ):
-    nodes = build_nodes(session=session, user=user, conversation=conversation)
+    nodes = build_nodes(
+        session=session,
+        user=user,
+        conversation=conversation,
+        admin_bot=admin_bot,
+    )
     workflow = StateGraph(BotState)
     workflow.add_node("load_user_context", nodes["load_user_context"])
     workflow.add_node("classify_intent", nodes["classify_intent"])
@@ -139,7 +151,10 @@ def _initial_state(
         "should_generate_voice": input_type == "voice",
         "should_escalate": False,
         "escalation_reason": None,
+        "escalation_id": None,
+        "escalation_phone": None,
         "admin_notification_sent": False,
+        "admin_message_id": None,
         "tool_calls": [],
     }
 
@@ -159,7 +174,10 @@ def _result_from_state(state: BotState) -> GraphResult:
             "doctor_type": state["doctor_type"],
             "missing_fields": state["missing_fields"],
             "escalation_reason": state["escalation_reason"],
+            "escalation_id": state["escalation_id"],
+            "escalation_phone": state["escalation_phone"],
             "admin_notification_sent": state["admin_notification_sent"],
+            "admin_message_id": state["admin_message_id"],
             "tool_calls": state["tool_calls"],
         },
     )
