@@ -11,6 +11,7 @@ from app.graph.intents import classify_intent_text
 from app.graph.state import BotState
 from app.services.admin_notify import send_admin_notification
 from app.services.booking import handle_booking_message, is_booking_in_progress
+from app.services.cancellation import handle_cancellation_message
 from app.services.clinic_knowledge import get_clinic_knowledge
 from app.services.faq import generate_admin_faq_answer
 from app.telegram.texts import Language, text
@@ -141,8 +142,18 @@ def build_nodes(
 
     async def cancel_appointment(state: BotState) -> dict[str, Any]:
         language = state["preferred_language"]
+        result = await handle_cancellation_message(
+            session=session,
+            user=user,
+            language=language,
+        )
         return {
-            "final_response_text": _not_ready_text(language, "cancel"),
+            "final_response_text": result.text,
+            "active_appointments": result.active_appointments,
+            "tool_calls": [
+                *state["tool_calls"],
+                {"tool": "find_user_appointments", "status": "success"},
+            ],
         }
 
     async def reschedule_appointment(state: BotState) -> dict[str, Any]:

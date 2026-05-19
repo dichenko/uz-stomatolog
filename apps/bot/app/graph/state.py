@@ -29,6 +29,7 @@ class BotState(TypedDict):
 
     proposed_slots: list[dict[str, Any]]
     selected_slot: dict[str, Any] | None
+    active_appointments: list[dict[str, Any]]
 
     missing_fields: list[str]
 

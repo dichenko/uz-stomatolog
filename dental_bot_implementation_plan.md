@@ -54,7 +54,8 @@ Do not try to implement the entire project in one large step.
   Completed in commit `7f6ebdd` and pushed to `origin/main`.
 - [x] Milestone 8 - Booking Flow.
   Completed in commit `0bf7489` and pushed to `origin/main`.
-- [ ] Milestone 9 - Cancellation Flow.
+- [x] Milestone 9 - Cancellation Flow.
+  Completed.
 - [ ] Milestone 10 - Rescheduling Flow.
 - [ ] Milestone 11 - Reminder Worker.
 - [ ] Milestone 12 - Calendar Sync Worker.

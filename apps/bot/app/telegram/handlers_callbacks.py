@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Conversation, User
 from app.db.repositories import UserRepository
 from app.services.booking import BookingFlowError, confirm_booking_slot
+from app.services.cancellation import CancellationError, confirm_cancellation
 from app.telegram.persistence import save_outgoing_message
 from app.telegram.texts import SUPPORTED_LANGUAGES, normalize_language, text
 
@@ -88,6 +89,59 @@ async def booking_slot_callback_handler(
                 "admin_notification_sent": result.admin_notification_sent,
             },
         )
+
+
+@router.callback_query(F.data.startswith("cancel_appointment:"))
+async def cancel_appointment_callback_handler(
+    callback: CallbackQuery,
+    db_session: AsyncSession,
+    db_user: User,
+    db_conversation: Conversation,
+    trace_id: str,
+) -> None:
+    language = normalize_language(db_user.preferred_language)
+    try:
+        appointment_id = int(callback.data.split(":", 1)[1] if callback.data else "-1")
+        result = await confirm_cancellation(
+            session=db_session,
+            user=db_user,
+            appointment_id=appointment_id,
+            language=language,
+            admin_bot=callback.bot,
+        )
+    except (ValueError, CancellationError):
+        await callback.answer(
+            _cancellation_error_text(language),
+            show_alert=True,
+        )
+        return
+
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        sent = await callback.message.answer(result.text)
+        await save_outgoing_message(
+            session=db_session,
+            user=db_user,
+            conversation=db_conversation,
+            telegram_message_id=sent.message_id,
+            text=result.text,
+            language=language,
+            trace_id=trace_id,
+            raw_payload={
+                "cancellation_confirmed": True,
+                "appointment_id": result.appointment.id,
+                "calendar_cancelled": result.calendar_cancelled,
+                "admin_notification_sent": result.admin_notification_sent,
+            },
+        )
+
+
+def _cancellation_error_text(language: str) -> str:
+    return {
+        "ru": "Не удалось отменить запись. Возможно, она уже отменена.",
+        "uz": "Yozuvni bekor qilib bo'lmadi. Ehtimol u allaqachon bekor qilingan.",
+        "en": "Could not cancel the appointment. It may already be cancelled.",
+    }[normalize_language(language)]
 
 
 def _booking_slot_error_text(language: str) -> str:

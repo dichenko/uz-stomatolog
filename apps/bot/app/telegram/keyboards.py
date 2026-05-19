@@ -59,7 +59,26 @@ def booking_slots_keyboard(slots: list[dict]) -> InlineKeyboardMarkup:
     )
 
 
+def cancel_appointments_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_cancel_label(appointment),
+                    callback_data=f"cancel_appointment:{appointment['id']}",
+                )
+            ]
+            for appointment in appointments
+        ]
+    )
+
+
 def _slot_label(slot: dict) -> str:
     timezone = slot.get("timezone") or "Asia/Tashkent"
     start_at = datetime.fromisoformat(slot["start_at"]).astimezone(ZoneInfo(timezone))
     return start_at.strftime("%d.%m %H:%M")
+
+
+def _cancel_label(appointment: dict) -> str:
+    formatted = appointment.get("formatted") or appointment.get("start_at", "")
+    return f"{formatted} — {appointment.get('service_type', '')}"
