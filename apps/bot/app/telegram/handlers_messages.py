@@ -213,6 +213,16 @@ async def voice_handler(
         if not stt_result.text:
             raise SpeechProviderError("Speech provider returned empty transcription")
 
+        logger.info(
+            "voice_transcription",
+            extra={
+                "trace_id": trace_id,
+                "language": language,
+                "provider": stt_result.provider,
+                "text": stt_result.text,
+            },
+        )
+
         transcribed_message = await MessageRepository(db_session).save_message(
             user_id=db_user.id,
             conversation_id=db_conversation.id,
