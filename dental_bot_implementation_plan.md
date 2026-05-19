@@ -61,9 +61,9 @@ Do not try to implement the entire project in one large step.
 - [x] Milestone 11 - Reminder Worker.
   Completed in commit `ac9f270`.
 - [x] Milestone 12 - Calendar Sync Worker.
-  Completed.
+  Completed in commit `dabd504`.
 - [x] Milestone 13 - Tracing and Observability.
-  Completed.
+  Completed in commit `dabd504`.
 - [ ] Milestone 14 - GitHub Actions Deployment.
 - [ ] Milestone 15 - VPS and Caddy Integration.
 - [ ] Milestone 16 - Automated Tests.
