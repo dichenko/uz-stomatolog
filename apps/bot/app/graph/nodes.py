@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.calendar import GoogleCalendarService
 from app.db.models import Conversation, User
-from app.db.repositories import EscalationRepository
+from app.db.repositories import ConversationRepository, EscalationRepository
 from app.graph.intents import classify_intent_text
 from app.graph.state import BotState
 from app.services.admin_notify import send_admin_notification
@@ -53,12 +53,32 @@ def build_nodes(
         }
 
     async def classify_intent(state: BotState) -> dict[str, Any]:
+        text_intent = classify_intent_text(state["input_text"])
         if is_booking_in_progress(conversation):
-            intent = "book_appointment"
+            exit_intents = ("admin_faq", "cancel_appointment", "reschedule_appointment")
+            if text_intent in exit_intents:
+                await ConversationRepository(session).update_state(
+                    conversation_id=conversation.id,
+                    current_flow=None,
+                    current_state=None,
+                    summary=None,
+                )
+                intent = text_intent
+            else:
+                intent = "book_appointment"
         elif is_rescheduling_in_progress(conversation):
-            intent = "reschedule_appointment"
+            if text_intent in ("admin_faq", "cancel_appointment"):
+                await ConversationRepository(session).update_state(
+                    conversation_id=conversation.id,
+                    current_flow=None,
+                    current_state=None,
+                    summary=None,
+                )
+                intent = text_intent
+            else:
+                intent = "reschedule_appointment"
         else:
-            intent = classify_intent_text(state["input_text"])
+            intent = text_intent
         logger.info(
             "graph_node_completed",
             extra={
