@@ -2,7 +2,7 @@
 
 Python monorepo for a Telegram dental clinic administrative assistant MVP.
 
-Current implementation includes the infrastructure foundation, database schema/repositories, Telegram webhook base with language selection, constrained clinic knowledge FAQ, and speech provider modules for Telegram voice input/output. LangGraph flows and calendar booking flows are intentionally not implemented yet.
+Current implementation includes: infrastructure foundation, database schema/repositories, Telegram webhook base with language selection, clinic knowledge FAQ, speech provider modules, LangGraph controlled flows, medical safety/escalation, Google Calendar integration, booking/cancellation/rescheduling flows, worker loops (reminders and calendar sync), and tracer integration (LangSmith + OpenTelemetry flags).
 
 ## Stack
 
@@ -99,6 +99,69 @@ Voice messages are handled through isolated speech providers:
 - Tests can use `MockSpeechProvider` without external API keys.
 
 Temporary audio files are written to `SPEECH_TEMP_DIR` and deleted after transcription, TTS generation, and Telegram sending. OpenAI and Muxlisa API keys must stay in `.env`; they are never logged or sent to clients.
+
+## Debugging and Observability
+
+### Logs
+
+All logs are structured JSON. To inspect logs:
+
+```sh
+docker compose -f infra/docker-compose.yml logs -f bot
+```
+
+Every log entry includes a `timestamp`, `level`, `logger`, and `message`. Extra fields are embedded directly in the JSON record.
+
+### Trace ID
+
+Every Telegram update receives a `trace_id` (hex string). This ID is stored in:
+
+- `messages` table (`trace_id` column)
+- `appointments` table (`created_trace_id` column)
+- `execution_runs` table (`trace_id` column)
+- Calendar event descriptions
+- Log entries (via `extra={"trace_id": "..."}`)
+
+To inspect an execution by trace ID:
+
+```sh
+# View the execution run summary
+docker compose -f infra/docker-compose.yml exec bot \
+  python -c "
+from app.db.session import async_session_factory
+from app.db.repositories import ExecutionRunRepository
+import asyncio
+
+async def inspect(trace_id):
+    async with async_session_factory() as session:
+        repo = ExecutionRunRepository(session)
+        # Query by trace_id via SQLAlchemy
+        from sqlalchemy import select
+        from app.db.models import ExecutionRun
+        result = await session.execute(
+            select(ExecutionRun).where(ExecutionRun.trace_id == trace_id)
+        )
+        run = result.scalar_one_or_none()
+        if run:
+            print(f'Intent: {run.intent}')
+            print(f'Status: {run.status}')
+            print(f'Duration: {run.duration_ms}ms')
+            print(f'Input: {run.graph_input}')
+            print(f'Output: {run.graph_output}')
+            print(f'Tool calls: {run.tool_calls}')
+            print(f'Error: {run.error}')
+
+asyncio.run(inspect('YOUR_TRACE_ID'))
+"
+```
+
+### LangSmith
+
+Set `LANGSMITH_TRACING=true` and provide `LANGSMITH_API_KEY` in `.env` to enable LangSmith traces. The app also sets `LANGSMITH_PROJECT` (default: `dental-telegram-mvp`). When disabled the app continues working without LangSmith.
+
+### OpenTelemetry
+
+OpenTelemetry integration is optional. Set `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` to export traces to an OTLP collector. When disabled the app continues working without OTel.
 
 ## Human Owner TODO
 

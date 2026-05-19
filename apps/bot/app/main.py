@@ -16,11 +16,14 @@ from app.telegram.webhook import (
     setup_telegram,
     shutdown_telegram,
 )
+from app.tracing import configure_tracing
+from app.workers.calendar_sync_worker import calendar_sync_worker_loop
 from app.workers.reminder_worker import reminder_worker_loop
 
 configure_logging()
 
 settings = get_settings()
+configure_tracing(settings)
 logger = logging.getLogger(__name__)
 
 
@@ -48,10 +51,16 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     await setup_telegram(fastapi_app)
     bot = fastapi_app.state.telegram_bot
     stop_event = asyncio.Event()
-    worker_task = asyncio.create_task(
+    reminder_task = asyncio.create_task(
         reminder_worker_loop(
             session_factory=async_session_factory,
             bot=bot,
+            stop_event=stop_event,
+        )
+    )
+    sync_task = asyncio.create_task(
+        calendar_sync_worker_loop(
+            session_factory=async_session_factory,
             stop_event=stop_event,
         )
     )
@@ -59,7 +68,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         stop_event.set()
-        await worker_task
+        await asyncio.gather(reminder_task, sync_task)
         await shutdown_telegram(fastapi_app)
 
 
