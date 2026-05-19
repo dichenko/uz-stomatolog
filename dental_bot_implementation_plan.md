@@ -57,9 +57,9 @@ Do not try to implement the entire project in one large step.
 - [x] Milestone 9 - Cancellation Flow.
   Completed in commit `2d473a1`.
 - [x] Milestone 10 - Rescheduling Flow.
-  Completed.
+  Completed in commit `ac9f270`.
 - [x] Milestone 11 - Reminder Worker.
-  Completed.
+  Completed in commit `ac9f270`.
 - [ ] Milestone 12 - Calendar Sync Worker.
 - [ ] Milestone 13 - Tracing and Observability.
 - [ ] Milestone 14 - GitHub Actions Deployment.
