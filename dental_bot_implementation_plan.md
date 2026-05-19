@@ -66,8 +66,10 @@ Do not try to implement the entire project in one large step.
   Completed in commit `dabd504`.
 - [x] Milestone 14 - GitHub Actions Deployment.
   Completed in commit `e4d6291`.
-- [ ] Milestone 15 - VPS and Caddy Integration.
-- [ ] Milestone 16 - Automated Tests.
+- [x] Milestone 15 - VPS and Caddy Integration.
+  Completed.
+- [x] Milestone 16 - Automated Tests.
+  Completed.
 - [ ] Milestone 17 - Final MVP QA.
 
 ---

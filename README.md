@@ -163,6 +163,70 @@ Set `LANGSMITH_TRACING=true` and provide `LANGSMITH_API_KEY` in `.env` to enable
 
 OpenTelemetry integration is optional. Set `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` to export traces to an OTLP collector. When disabled the app continues working without OTel.
 
+## VPS Deployment
+
+### Prerequisites
+
+1. VPS with Docker and Docker Compose installed.
+2. Caddy installed on the host (outside Docker).
+3. A domain/subdomain pointed to the VPS IP (DNS A record).
+4. GitHub Secrets configured: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_PROJECT_DIR`, `VPS_PORT` (optional).
+
+### Initial VPS Setup
+
+```sh
+# Clone the repository on the VPS
+git clone https://github.com/your-org/dental-bot.git /opt/dental-bot
+cd /opt/dental-bot
+
+# Create .env from template and fill in secrets
+cp .env.example .env
+vim .env
+
+# Start the app (first run)
+docker compose -f infra/docker-compose.yml up -d --build
+
+# Run DB migrations
+docker compose -f infra/docker-compose.yml exec bot alembic upgrade head
+```
+
+### Caddy Integration
+
+Copy the Caddy config template and reload:
+
+```sh
+cp infra/Caddyfile.example /etc/caddy/sites-enabled/dental-bot.conf
+# Edit the domain name:
+vim /etc/caddy/sites-enabled/dental-bot.conf
+caddy reload
+```
+
+The `Caddyfile.example` reverse proxies HTTPS traffic from your domain to `127.0.0.1:8000` inside the container. Docker Compose already maps port 8000 to localhost only.
+
+### Telegram Webhook Registration
+
+After the domain is reachable:
+
+```sh
+# Set required env vars
+export TELEGRAM_BOT_TOKEN="your-token"
+export APP_BASE_URL="https://bot.example.com"
+export TELEGRAM_WEBHOOK_SECRET="your-secret"
+
+sh scripts/set_telegram_webhook.sh
+```
+
+The app also registers the webhook automatically on startup when `APP_ENV=prod`.
+
+### Automatic Deployment
+
+Push to `main` triggers `.github/workflows/deploy.yml` which:
+1. SSH to VPS
+2. `git pull --ff-only`
+3. Rebuild and restart `bot` container
+4. Run DB migrations
+5. Show container status and recent logs
+
 ## Human Owner TODO
 
 - Provide final Muxlisa credentials.

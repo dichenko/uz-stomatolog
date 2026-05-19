@@ -6,7 +6,11 @@ from sqlalchemy import select
 
 from app.db.models import Appointment, ReminderJob, UserPhone
 from app.db.repositories import ConversationRepository, UserRepository
-from app.services.booking import confirm_booking_slot, handle_booking_message
+from app.services.booking import (
+    BookingSlotConflictError,
+    confirm_booking_slot,
+    handle_booking_message,
+)
 from app.telegram.keyboards import booking_slots_keyboard, contact_request_keyboard
 
 TZ = ZoneInfo("Asia/Tashkent")
@@ -121,3 +125,74 @@ def test_booking_keyboards_render_expected_buttons():
     assert slot_keyboard.inline_keyboard[0][0].callback_data == "booking_slot:0"
     assert slot_keyboard.inline_keyboard[0][0].text == "21.05 09:00"
     assert contact_keyboard.keyboard[0][0].request_contact is True
+
+
+async def test_booking_rejects_conflicting_slot(session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.admin_notify.get_settings",
+        lambda: SimpleNamespace(admin_telegram_chat_id="-100123"),
+    )
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=2002,
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=2002,
+    )
+    now = datetime(2026, 5, 21, 8, 0, tzinfo=TZ)
+
+    result = await handle_booking_message(
+        session=session,
+        user=user,
+        conversation=conversation,
+        input_text="Ali +998 90 123 45 67",
+        language="en",
+        service_type="cleaning",
+        doctor_type="therapist",
+        calendar_service=FakeCalendarService(),
+        now=now,
+    )
+
+    assert len(result.proposed_slots) == 3
+
+    busy_start = datetime.fromisoformat(result.proposed_slots[0]["start_at"])
+    busy_end = datetime.fromisoformat(result.proposed_slots[0]["end_at"])
+
+    class ConflictingCalendarService:
+        async def list_events(self, *, time_min, time_max):
+            return [
+                {
+                    "id": "conflict-event",
+                    "status": "confirmed",
+                    "summary": "[Bot] treatment — Other Patient — +998",
+                    "start": {
+                        "dateTime": busy_start.isoformat(),
+                        "timeZone": "Asia/Tashkent",
+                    },
+                    "end": {
+                        "dateTime": busy_end.isoformat(),
+                        "timeZone": "Asia/Tashkent",
+                    },
+                    "extendedProperties": {
+                        "private": {
+                            "doctor_type": "therapist",
+                            "created_by": "telegram_bot",
+                        }
+                    },
+                }
+            ]
+
+    try:
+        await confirm_booking_slot(
+            session=session,
+            user=user,
+            conversation=conversation,
+            slot_index=0,
+            language="en",
+            calendar_service=ConflictingCalendarService(),
+            admin_bot=FakeAdminBot(),
+        )
+        raise AssertionError("Expected BookingSlotConflictError")
+    except BookingSlotConflictError:
+        pass

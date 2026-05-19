@@ -1,3 +1,17 @@
+# Copy this to /etc/caddy/Caddyfile or your Caddy config directory.
+# Replace bot.example.com with the actual domain.
+# After saving, run: caddy reload
+
 bot.example.com {
     reverse_proxy 127.0.0.1:8000
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/bot-access.log
+    }
 }
