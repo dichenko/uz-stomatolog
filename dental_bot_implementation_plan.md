@@ -48,7 +48,7 @@ Do not try to implement the entire project in one large step.
 - [x] Milestone 5 - LangGraph Controlled Flow.
 - [x] Milestone 6 - Medical Safety and Escalation.
 - [x] Milestone 7 - Google Calendar Integration.
-- [ ] Milestone 8 - Booking Flow.
+- [x] Milestone 8 - Booking Flow.
 - [ ] Milestone 9 - Cancellation Flow.
 - [ ] Milestone 10 - Rescheduling Flow.
 - [ ] Milestone 11 - Reminder Worker.
@@ -541,6 +541,22 @@ Implement Calendar read/write and availability logic.
 ---
 
 ## Milestone 8 — Booking Flow
+
+**Status:** Done.
+
+Implemented:
+
+- Adding booking draft state, patient data collection, contact request keyboard, slot proposal keyboard, booking slot callback, DB appointment creation, Calendar event creation, reminder jobs, and admin notification.
+- Added booking service that stores temporary booking draft state in conversation state, collects patient name and phone, proposes three available slots, and confirms selected slot.
+- Added Telegram contact request keyboard and inline slot selection keyboard.
+- Added booking slot callback handler that re-checks availability, creates DB appointment, creates Google Calendar event when configured, schedules reminder jobs, saves phone, confirms to user, and notifies admins.
+- Booking intent now continues existing booking flow even when the next user message only contains name/phone/contact.
+- Added booking flow tests for data collection, slot proposal, appointment creation, calendar event creation, reminders, phone persistence, admin notification, and keyboard rendering.
+
+Verified:
+
+- Targeted lint for booking/Telegram files passed.
+- Test suite passed: `30 passed`.
 
 ### Goal
 

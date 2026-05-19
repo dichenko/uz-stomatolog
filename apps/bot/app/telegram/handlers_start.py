@@ -112,7 +112,9 @@ async def my_appointments_handler(
         lines = [text("appointments_header", language)]
         for appointment in appointments:
             start = appointment.start_at.strftime("%Y-%m-%d %H:%M")
-            lines.append(f"- {start}: {appointment.service_type}, {appointment.doctor_type}")
+            lines.append(
+                f"- {start}: {appointment.service_type}, {appointment.doctor_type}"
+            )
         response_text = "\n".join(lines)
 
     sent = await message.answer(response_text)

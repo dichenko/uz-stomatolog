@@ -4,6 +4,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.calendar import GoogleCalendarService
 from app.db.models import Conversation, User
 from app.db.repositories import ExecutionRunRepository
 from app.graph.nodes import build_nodes, route_intent
@@ -26,6 +27,7 @@ async def run_bot_graph(
     telegram_profile: dict[str, Any],
     input_message_id: int | None = None,
     admin_bot: Any | None = None,
+    calendar_service: GoogleCalendarService | None = None,
 ) -> GraphResult:
     graph_input = _initial_state(
         trace_id=trace_id,
@@ -50,6 +52,7 @@ async def run_bot_graph(
             user=user,
             conversation=conversation,
             admin_bot=admin_bot,
+            calendar_service=calendar_service,
         )
         output: BotState = await graph.ainvoke(graph_input)
         await runs.finish(
@@ -72,12 +75,14 @@ def _compile_graph(
     user: User,
     conversation: Conversation,
     admin_bot: Any | None = None,
+    calendar_service: GoogleCalendarService | None = None,
 ):
     nodes = build_nodes(
         session=session,
         user=user,
         conversation=conversation,
         admin_bot=admin_bot,
+        calendar_service=calendar_service,
     )
     workflow = StateGraph(BotState)
     workflow.add_node("load_user_context", nodes["load_user_context"])

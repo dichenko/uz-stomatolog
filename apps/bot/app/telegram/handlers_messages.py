@@ -18,7 +18,11 @@ from app.speech.temp_files import (
     create_temp_audio_path,
     validate_file_size,
 )
-from app.telegram.keyboards import language_keyboard
+from app.telegram.keyboards import (
+    booking_slots_keyboard,
+    contact_request_keyboard,
+    language_keyboard,
+)
 from app.telegram.persistence import save_outgoing_message
 from app.telegram.texts import normalize_language, text
 
@@ -63,7 +67,8 @@ async def fallback_text_handler(
         language=language,
     )
     response_text = graph_result.final_response_text
-    sent = await message.answer(response_text)
+    reply_markup = _reply_markup_for_graph_result(graph_result, language)
+    sent = await message.answer(response_text, reply_markup=reply_markup)
     await save_outgoing_message(
         session=db_session,
         user=db_user,
@@ -73,6 +78,65 @@ async def fallback_text_handler(
         language=language,
         trace_id=trace_id,
         raw_payload={
+            "intent": graph_result.intent,
+            "safety_status": graph_result.safety_status,
+            **graph_result.metadata,
+        },
+    )
+
+
+@router.message(F.contact)
+async def contact_handler(
+    message: Message,
+    db_session: AsyncSession,
+    db_user: User,
+    db_conversation: Conversation,
+    db_incoming_message: DbMessage,
+    trace_id: str,
+) -> None:
+    if db_user.preferred_language is None:
+        response_text = text("language_required")
+        sent = await message.answer(response_text, reply_markup=language_keyboard())
+        await save_outgoing_message(
+            session=db_session,
+            user=db_user,
+            conversation=db_conversation,
+            telegram_message_id=sent.message_id,
+            text=response_text,
+            language=None,
+            trace_id=trace_id,
+            raw_payload={"reply_markup": "language_keyboard"},
+        )
+        return
+
+    language = normalize_language(db_user.preferred_language)
+    phone_number = message.contact.phone_number if message.contact else ""
+    graph_result = await _run_graph_for_message(
+        db_session=db_session,
+        db_user=db_user,
+        db_conversation=db_conversation,
+        db_incoming_message=db_incoming_message,
+        message=message,
+        trace_id=trace_id,
+        input_text=phone_number,
+        input_type="text",
+        language=language,
+    )
+    reply_markup = _reply_markup_for_graph_result(graph_result, language)
+    sent = await message.answer(
+        graph_result.final_response_text,
+        reply_markup=reply_markup,
+    )
+    await save_outgoing_message(
+        session=db_session,
+        user=db_user,
+        conversation=db_conversation,
+        telegram_message_id=sent.message_id,
+        text=graph_result.final_response_text,
+        language=language,
+        trace_id=trace_id,
+        raw_payload={
+            "input_type": "contact",
             "intent": graph_result.intent,
             "safety_status": graph_result.safety_status,
             **graph_result.metadata,
@@ -175,7 +239,8 @@ async def voice_handler(
             f"{graph_result.final_response_text}\n\n"
             f"{text('voice_ai_disclosure', language)}"
         )
-        sent = await message.answer(response_text)
+        reply_markup = _reply_markup_for_graph_result(graph_result, language)
+        sent = await message.answer(response_text, reply_markup=reply_markup)
         await save_outgoing_message(
             session=db_session,
             user=db_user,
@@ -316,3 +381,12 @@ async def _send_and_save_text(
         trace_id=trace_id,
         raw_payload=raw_payload,
     )
+
+
+def _reply_markup_for_graph_result(graph_result: GraphResult, language: str):
+    missing_fields = graph_result.metadata.get("missing_fields") or []
+    if graph_result.proposed_slots:
+        return booking_slots_keyboard(graph_result.proposed_slots)
+    if graph_result.intent == "book_appointment" and "phone" in missing_fields:
+        return contact_request_keyboard(language)
+    return None

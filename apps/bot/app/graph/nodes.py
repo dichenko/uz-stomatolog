@@ -4,11 +4,13 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.calendar import GoogleCalendarService
 from app.db.models import Conversation, User
 from app.db.repositories import EscalationRepository
 from app.graph.intents import classify_intent_text
 from app.graph.state import BotState
 from app.services.admin_notify import send_admin_notification
+from app.services.booking import handle_booking_message, is_booking_in_progress
 from app.services.clinic_knowledge import get_clinic_knowledge
 from app.services.faq import generate_admin_faq_answer
 from app.telegram.texts import Language, text
@@ -22,6 +24,7 @@ def build_nodes(
     user: User,
     conversation: Conversation,
     admin_bot: Any | None = None,
+    calendar_service: GoogleCalendarService | None = None,
 ):
     async def load_user_context(state: BotState) -> dict[str, Any]:
         logger.info(
@@ -45,7 +48,10 @@ def build_nodes(
         }
 
     async def classify_intent(state: BotState) -> dict[str, Any]:
-        intent = classify_intent_text(state["input_text"])
+        if is_booking_in_progress(conversation):
+            intent = "book_appointment"
+        else:
+            intent = classify_intent_text(state["input_text"])
         logger.info(
             "graph_node_completed",
             extra={
@@ -108,11 +114,29 @@ def build_nodes(
 
     async def start_booking(state: BotState) -> dict[str, Any]:
         language = state["preferred_language"]
+        result = await handle_booking_message(
+            session=session,
+            user=user,
+            conversation=conversation,
+            input_text=state["input_text"],
+            language=language,
+            service_type=_detect_service_type(state["input_text"]),
+            doctor_type=_detect_doctor_type(state["input_text"]),
+            calendar_service=calendar_service,
+        )
         return {
-            "service_type": _detect_service_type(state["input_text"]),
-            "doctor_type": _detect_doctor_type(state["input_text"]),
-            "missing_fields": ["patient_name", "phone"],
-            "final_response_text": _booking_start_text(language),
+            "service_type": result.service_type,
+            "doctor_type": result.doctor_type,
+            "missing_fields": result.missing_fields,
+            "proposed_slots": result.proposed_slots,
+            "final_response_text": result.text,
+            "tool_calls": [
+                *state["tool_calls"],
+                {
+                    "tool": "find_available_slots",
+                    "status": "success" if result.proposed_slots else "skipped",
+                },
+            ],
         }
 
     async def cancel_appointment(state: BotState) -> dict[str, Any]:
@@ -302,20 +326,6 @@ def _detect_doctor_type(input_text: str) -> str:
     if any(keyword in normalized for keyword in surgical_keywords):
         return "surgeon"
     return "therapist"
-
-
-def _booking_start_text(language: Language) -> str:
-    return {
-        "ru": (
-            "Могу начать запись на консультацию. Напишите, пожалуйста, "
-            "имя пациента и номер телефона."
-        ),
-        "uz": (
-            "Qabulga yozishni boshlayman. Iltimos, bemor ismi va telefon "
-            "raqamini yozing."
-        ),
-        "en": "I can start booking. Please send the patient's name and phone number.",
-    }[language]
 
 
 def _not_ready_text(language: Language, flow: str) -> str:
