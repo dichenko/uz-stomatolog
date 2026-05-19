@@ -45,10 +45,15 @@ Do not try to implement the entire project in one large step.
 - [x] Milestone 3 - Clinic Knowledge Base and Text FAQ.
   Completed in commit `787027a` and pushed to `origin/main`.
 - [x] Milestone 4 - Speech Modules.
+  Completed in commit `a77fad8` and pushed to `origin/main`.
 - [x] Milestone 5 - LangGraph Controlled Flow.
+  Completed in commit `a77fad8` and pushed to `origin/main`.
 - [x] Milestone 6 - Medical Safety and Escalation.
+  Completed in commit `7f6ebdd` and pushed to `origin/main`.
 - [x] Milestone 7 - Google Calendar Integration.
+  Completed in commit `7f6ebdd` and pushed to `origin/main`.
 - [x] Milestone 8 - Booking Flow.
+  Completed in commit `0bf7489` and pushed to `origin/main`.
 - [ ] Milestone 9 - Cancellation Flow.
 - [ ] Milestone 10 - Rescheduling Flow.
 - [ ] Milestone 11 - Reminder Worker.
