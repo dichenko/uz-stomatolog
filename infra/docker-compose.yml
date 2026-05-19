@@ -18,10 +18,11 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-dental_bot}
-      POSTGRES_USER: ${POSTGRES_USER:-dental_bot}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    env_file:
+      - path: ../.env
+        required: false
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
