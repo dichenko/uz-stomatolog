@@ -364,7 +364,7 @@ async def _run_graph_for_message(
     language: str,
 ) -> GraphResult:
     telegram_user = message.from_user
-    return await run_bot_graph(
+    result = await run_bot_graph(
         session=db_session,
         user=db_user,
         conversation=db_conversation,
@@ -377,6 +377,16 @@ async def _run_graph_for_message(
         input_message_id=db_incoming_message.id,
         admin_bot=message.bot,
     )
+    logger.info(
+        "graph_execution",
+        extra={
+            "trace_id": trace_id,
+            "input": input_text,
+            "intent": result.intent,
+            "output": result.final_response_text,
+        },
+    )
+    return result
 
 
 async def _send_and_save_text(
