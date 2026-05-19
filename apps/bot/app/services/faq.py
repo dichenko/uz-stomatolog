@@ -227,7 +227,8 @@ async def _try_openai_answer(
                     "content": (
                         "You are a dental clinic administrative assistant. "
                         "Answer only using the provided knowledge base. "
-                        "If the answer is absent, say that an administrator will clarify. "
+                        "If the answer is absent, "
+                        "say that an administrator will clarify. "
                         "Never provide medical advice. "
                         f"Answer in {language}."
                     ),

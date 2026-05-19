@@ -50,6 +50,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+exclude = ["app/db/migrations/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

@@ -2,13 +2,13 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     MetaData,
     String,
     Text,
@@ -16,7 +16,6 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -94,7 +93,11 @@ class UserPhone(Base):
 
     user: Mapped[User] = relationship(back_populates="phones")
 
-    __table_args__ = (UniqueConstraint("user_id", "phone", name="uq_user_phones_user_phone"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "phone", name="uq_user_phones_user_phone"
+        ),
+    )
 
 
 class Conversation(Base, TimestampMixin):
@@ -106,7 +109,9 @@ class Conversation(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    telegram_chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    telegram_chat_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True
+    )
     current_flow: Mapped[str | None] = mapped_column(String(64))
     current_state: Mapped[str | None] = mapped_column(String(128))
     summary: Mapped[str | None] = mapped_column(Text)
