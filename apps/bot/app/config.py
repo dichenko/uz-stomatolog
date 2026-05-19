@@ -79,6 +79,7 @@ class Settings(BaseSettings):
 
     langsmith_tracing: bool = False
     langsmith_api_key: SecretStr | None = None
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
     langsmith_project: str = "dental-telegram-mvp"
 
     otel_enabled: bool = False

@@ -29,13 +29,12 @@ def _configure_langsmith(settings: Settings) -> None:
     os.environ["LANGSMITH_TRACING"] = "true"
     os.environ["LANGSMITH_API_KEY"] = api_key
     os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
-    os.environ["LANGSMITH_ENDPOINT"] = (
-        "https://api.smith.langchain.com"
-    )
+    os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
     logger.info(
         "langsmith_tracing_configured",
         extra={
             "project": settings.langsmith_project,
+            "endpoint": settings.langsmith_endpoint,
         },
     )
 

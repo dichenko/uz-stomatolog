@@ -18,6 +18,7 @@ def test_tracing_disabled_when_langsmith_tracing_false():
         settings = SimpleNamespace(
             langsmith_tracing=False,
             langsmith_api_key=None,
+            langsmith_endpoint="https://api.smith.langchain.com",
             langsmith_project="test-project",
             otel_enabled=False,
             otel_exporter_otlp_endpoint=None,
@@ -45,6 +46,7 @@ def test_tracing_configures_langsmith_env_vars():
         settings = SimpleNamespace(
             langsmith_tracing=True,
             langsmith_api_key=SimpleNamespace(get_secret_value=lambda: "ls__test"),
+            langsmith_endpoint="https://api.smith.langchain.com",
             langsmith_project="dental-test",
             otel_enabled=False,
             otel_exporter_otlp_endpoint=None,
@@ -73,6 +75,7 @@ def test_tracing_configures_otel_env_vars():
         settings = SimpleNamespace(
             langsmith_tracing=False,
             langsmith_api_key=None,
+            langsmith_endpoint="https://api.smith.langchain.com",
             langsmith_project="test-project",
             otel_enabled=True,
             otel_exporter_otlp_endpoint="http://localhost:4317",
