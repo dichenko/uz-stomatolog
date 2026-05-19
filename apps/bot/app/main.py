@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from app.telegram.webhook import (
     setup_telegram,
     shutdown_telegram,
 )
+from app.workers.reminder_worker import reminder_worker_loop
 
 configure_logging()
 
@@ -44,9 +46,20 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     except SQLAlchemyError:
         logger.exception("clinic_knowledge_load_skipped")
     await setup_telegram(fastapi_app)
+    bot = fastapi_app.state.telegram_bot
+    stop_event = asyncio.Event()
+    worker_task = asyncio.create_task(
+        reminder_worker_loop(
+            session_factory=async_session_factory,
+            bot=bot,
+            stop_event=stop_event,
+        )
+    )
     try:
         yield
     finally:
+        stop_event.set()
+        await worker_task
         await shutdown_telegram(fastapi_app)
 
 

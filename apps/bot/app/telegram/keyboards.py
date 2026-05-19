@@ -73,6 +73,34 @@ def cancel_appointments_keyboard(appointments: list[dict]) -> InlineKeyboardMark
     )
 
 
+def reschedule_appointments_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_cancel_label(appointment),
+                    callback_data=f"reschedule_select:{appointment['id']}",
+                )
+            ]
+            for appointment in appointments
+        ]
+    )
+
+
+def reschedule_slots_keyboard(slots: list[dict]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_slot_label(slot),
+                    callback_data=f"reschedule_slot:{index}",
+                )
+            ]
+            for index, slot in enumerate(slots)
+        ]
+    )
+
+
 def _slot_label(slot: dict) -> str:
     timezone = slot.get("timezone") or "Asia/Tashkent"
     start_at = datetime.fromisoformat(slot["start_at"]).astimezone(ZoneInfo(timezone))

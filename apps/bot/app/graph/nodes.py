@@ -14,6 +14,10 @@ from app.services.booking import handle_booking_message, is_booking_in_progress
 from app.services.cancellation import handle_cancellation_message
 from app.services.clinic_knowledge import get_clinic_knowledge
 from app.services.faq import generate_admin_faq_answer
+from app.services.rescheduling import (
+    handle_reschedule_message,
+    is_rescheduling_in_progress,
+)
 from app.telegram.texts import Language, text
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,8 @@ def build_nodes(
     async def classify_intent(state: BotState) -> dict[str, Any]:
         if is_booking_in_progress(conversation):
             intent = "book_appointment"
+        elif is_rescheduling_in_progress(conversation):
+            intent = "reschedule_appointment"
         else:
             intent = classify_intent_text(state["input_text"])
         logger.info(
@@ -158,8 +164,18 @@ def build_nodes(
 
     async def reschedule_appointment(state: BotState) -> dict[str, Any]:
         language = state["preferred_language"]
+        result = await handle_reschedule_message(
+            session=session,
+            user=user,
+            language=language,
+        )
         return {
-            "final_response_text": _not_ready_text(language, "reschedule"),
+            "final_response_text": result.text,
+            "active_appointments": result.active_appointments,
+            "tool_calls": [
+                *state["tool_calls"],
+                {"tool": "find_user_appointments", "status": "success"},
+            ],
         }
 
     async def emergency_or_escalation(state: BotState) -> dict[str, Any]:

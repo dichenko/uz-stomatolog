@@ -23,6 +23,7 @@ from app.telegram.keyboards import (
     cancel_appointments_keyboard,
     contact_request_keyboard,
     language_keyboard,
+    reschedule_appointments_keyboard,
 )
 from app.telegram.persistence import save_outgoing_message
 from app.telegram.texts import normalize_language, text
@@ -391,6 +392,8 @@ def _reply_markup_for_graph_result(graph_result: GraphResult, language: str):
         return booking_slots_keyboard(graph_result.proposed_slots)
     if graph_result.intent == "cancel_appointment" and active_appointments:
         return cancel_appointments_keyboard(active_appointments)
+    if graph_result.intent == "reschedule_appointment" and active_appointments:
+        return reschedule_appointments_keyboard(active_appointments)
     if graph_result.intent == "book_appointment" and "phone" in missing_fields:
         return contact_request_keyboard(language)
     return None

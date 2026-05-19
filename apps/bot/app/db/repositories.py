@@ -407,6 +407,15 @@ class ReminderRepository:
         await self.session.flush()
         return count
 
+    async def mark_failed(self, reminder_id: int) -> ReminderJob:
+        reminder = await self.session.get(ReminderJob, reminder_id)
+        if reminder is None:
+            raise ValueError(f"Reminder job {reminder_id} not found")
+        reminder.status = "failed"
+        reminder.error = "Failed to send reminder"
+        await self.session.flush()
+        return reminder
+
 
 class ExecutionRunRepository:
     def __init__(self, session: AsyncSession) -> None:
