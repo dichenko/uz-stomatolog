@@ -1,6 +1,14 @@
 #!/usr/bin/env sh
 set -eu
 
+SCRIPT_DIR="$(CDPATH="" cd "$(dirname -- "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+if [ -f "$PROJECT_DIR/.env" ]; then
+  set -a
+  . "$PROJECT_DIR/.env"
+  set +a
+fi
+
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   echo "TELEGRAM_BOT_TOKEN is required" >&2
   exit 1
