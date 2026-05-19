@@ -20,24 +20,9 @@ async def start_handler(
     db_conversation: Conversation,
     trace_id: str,
 ) -> None:
-    if db_user.preferred_language is None:
-        response_text = text("choose_language")
-        sent = await message.answer(response_text, reply_markup=language_keyboard())
-        await save_outgoing_message(
-            session=db_session,
-            user=db_user,
-            conversation=db_conversation,
-            telegram_message_id=sent.message_id,
-            text=response_text,
-            language=None,
-            trace_id=trace_id,
-            raw_payload={"reply_markup": "language_keyboard"},
-        )
-        return
-
     language = normalize_language(db_user.preferred_language)
-    response_text = text("welcome", language)
-    sent = await message.answer(response_text)
+    response_text = text("choose_language", language)
+    sent = await message.answer(response_text, reply_markup=language_keyboard())
     await save_outgoing_message(
         session=db_session,
         user=db_user,
@@ -46,6 +31,7 @@ async def start_handler(
         text=response_text,
         language=language,
         trace_id=trace_id,
+        raw_payload={"reply_markup": "language_keyboard"},
     )
 
 
