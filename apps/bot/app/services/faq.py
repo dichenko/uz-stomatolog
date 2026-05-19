@@ -2,6 +2,8 @@ import logging
 import re
 from dataclasses import dataclass
 
+from langsmith import traceable
+from langsmith.wrappers import wrap_openai
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -157,6 +159,7 @@ MEDICAL_KEYWORDS = (
 )
 
 
+@traceable(name="generate_admin_faq_answer")
 async def generate_admin_faq_answer(
     *,
     question: str,
@@ -217,7 +220,7 @@ async def _try_openai_answer(
         return None
 
     try:
-        client = AsyncOpenAI(api_key=api_key)
+        client = wrap_openai(AsyncOpenAI(api_key=api_key))
         response = await client.chat.completions.create(
             model=settings.openai_text_model,
             temperature=0,
@@ -246,6 +249,7 @@ async def _try_openai_answer(
         return None
 
 
+@traceable(name="detect_topic")
 def _detect_topic(question: str) -> str | None:
     normalized = question.casefold()
     for topic, keywords in KEYWORDS.items():
@@ -259,6 +263,7 @@ def _is_medical_advice_request(question: str) -> bool:
     return any(keyword in normalized for keyword in MEDICAL_KEYWORDS)
 
 
+@traceable(name="extract_section")
 def _extract_section(knowledge: str, title: str) -> str | None:
     pattern = rf"^##\s+{re.escape(title)}\s*$"
     match = re.search(pattern, knowledge, flags=re.MULTILINE)

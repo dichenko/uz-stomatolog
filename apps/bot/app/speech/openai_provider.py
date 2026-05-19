@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from langsmith.wrappers import wrap_openai
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 from app.config import Settings
@@ -172,12 +173,12 @@ class OpenAISpeechProvider:
         if not api_key:
             raise SpeechProviderError("OPENAI_API_KEY is required for OpenAI speech")
 
-        self._client = AsyncOpenAI(
+        self._client = wrap_openai(AsyncOpenAI(
             api_key=api_key,
             base_url=self.settings.openai_base_url or None,
             timeout=self.settings.openai_stt_timeout_ms / 1000,
             max_retries=0,
-        )
+        ))
         return self._client
 
 
