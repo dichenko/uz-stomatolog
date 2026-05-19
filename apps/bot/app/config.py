@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     openai_tts_voice: str = "marin"
     openai_tts_fallback_voice: str = "cedar"
     openai_tts_response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = (
-        "mp3"
+        "opus"
     )
     openai_tts_timeout_ms: int = 60000
     openai_tts_max_chars: int = 4096

@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.types import FSInputFile, Message
@@ -190,6 +192,7 @@ async def voice_handler(
 
     input_path = create_temp_audio_path(suffix=".ogg")
     output_path: str | None = None
+    tts_original_path: str | None = None
     try:
         telegram_file = await message.bot.get_file(message.voice.file_id)
         if telegram_file.file_path is None:
@@ -266,9 +269,11 @@ async def voice_handler(
                 graph_result.final_response_text,
                 language,
             )
-            output_path = tts_result.file_path
-            audio = FSInputFile(output_path, filename=f"voice.{tts_result.format}")
-            sent_audio = await message.answer_audio(audio)
+            tts_original_path = tts_result.file_path
+            voice_path = await _ensure_ogg(tts_original_path)
+            output_path = str(voice_path)
+            audio = FSInputFile(output_path, filename="voice.ogg")
+            sent_audio = await message.answer_voice(audio)
             await save_outgoing_message(
                 session=db_session,
                 user=db_user,
@@ -331,6 +336,9 @@ async def voice_handler(
     finally:
         await cleanup_temp_file(input_path, reason="telegram_voice_input_cleanup")
         await cleanup_temp_file(output_path, reason="telegram_voice_output_cleanup")
+        await cleanup_temp_file(
+            tts_original_path, reason="telegram_tts_original_cleanup"
+        )
 
 
 async def _run_graph_for_message(
@@ -397,3 +405,33 @@ def _reply_markup_for_graph_result(graph_result: GraphResult, language: str):
     if graph_result.intent == "book_appointment" and "phone" in missing_fields:
         return contact_request_keyboard(language)
     return None
+
+
+async def _ensure_ogg(file_path: str) -> Path:
+    path = Path(file_path)
+    if path.suffix.casefold() in (".ogg", ".opus"):
+        return path
+
+    output_path = Path(str(path) + ".ogg")
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(path),
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "16k",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        str(output_path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await process.communicate()
+    if process.returncode != 0:
+        error_text = stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"ffmpeg ogg conversion failed: {error_text}")
+    return output_path
