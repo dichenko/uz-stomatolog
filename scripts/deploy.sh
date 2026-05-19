@@ -3,12 +3,28 @@ set -eu
 
 COMPOSE_FILE="infra/docker-compose.yml"
 
-# Load .env if present so postgres vars are available for pg_isready
+# Load .env if present
 if [ -f .env ]; then
   set -a
   . ./.env
   set +a
 fi
+
+_notify() {
+  _status="$1"
+  _msg="$2"
+  _token="${TELEGRAM_BOT_TOKEN:-}"
+  _chat="${DEV_ADMIN_TG_ID:-}"
+  if [ -n "$_token" ] && [ -n "$_chat" ]; then
+    curl -sS -X POST "https://api.telegram.org/bot${_token}/sendMessage" \
+      -d "chat_id=${_chat}" \
+      -d "text=${_msg}" \
+      -d "parse_mode=HTML" \
+      > /dev/null 2>&1 || true
+  fi
+}
+
+trap '_notify "FAILED" "❌ Deploy <b>FAILED</b> on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"' ERR
 
 echo "=== Pulling latest images and rebuilding ==="
 docker compose -f "$COMPOSE_FILE" pull --quiet 2>/dev/null || true
@@ -40,3 +56,5 @@ docker compose -f "$COMPOSE_FILE" ps
 
 echo "=== Recent logs ==="
 docker compose -f "$COMPOSE_FILE" logs --tail=50 bot
+
+_notify "OK" "✅ Deploy <b>successful</b> on $(hostname) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
