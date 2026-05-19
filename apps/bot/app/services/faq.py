@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from langsmith import traceable
 from langsmith.wrappers import wrap_openai
 from openai import AsyncOpenAI
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.settings_reader import get_clinic_info, get_system_prompt
 from app.config import get_settings
 from app.telegram.texts import Language, normalize_language
 
@@ -165,6 +167,7 @@ async def generate_admin_faq_answer(
     question: str,
     language: str | None,
     knowledge: str,
+    session: AsyncSession | None = None,
 ) -> FaqAnswer:
     normalized_language = normalize_language(language)
     if _is_medical_advice_request(question):
@@ -178,6 +181,7 @@ async def generate_admin_faq_answer(
         question=question,
         language=normalized_language,
         knowledge=knowledge,
+        session=session,
     )
     if openai_answer is not None:
         return FaqAnswer(text=openai_answer, answered=True, source="openai")
@@ -210,6 +214,7 @@ async def _try_openai_answer(
     question: str,
     language: Language,
     knowledge: str,
+    session: AsyncSession | None = None,
 ) -> str | None:
     settings = get_settings()
     if settings.openai_api_key is None:
@@ -219,28 +224,56 @@ async def _try_openai_answer(
     if not api_key:
         return None
 
+    system_prompt = ""
+    clinic_info = ""
+    if session is not None:
+        try:
+            system_prompt = await get_system_prompt(session)
+        except Exception:
+            logger.exception("admin_get_system_prompt_failed")
+        try:
+            clinic_info = await get_clinic_info(session)
+        except Exception:
+            logger.exception("admin_get_clinic_info_failed")
+
+    messages: list[dict[str, str]] = [
+        {
+            "role": "system",
+            "content": (
+                "You are a dental clinic administrative assistant. "
+                "Answer only using the provided knowledge base. "
+                "If the answer is absent, "
+                "say that an administrator will clarify. "
+                "Never provide medical advice."
+            ),
+        },
+    ]
+
+    if system_prompt.strip():
+        messages.append({"role": "system", "content": system_prompt.strip()})
+
+    messages.append({
+        "role": "system",
+        "content": _build_language_instruction(language),
+    })
+
+    if clinic_info.strip():
+        messages.append({
+            "role": "system",
+            "content": f"Справочная информация о клинике:\n\n{clinic_info.strip()}",
+        })
+
+    messages.append({
+        "role": "user",
+        "content": f"Knowledge base:\n{knowledge}\n\nQuestion:\n{question}",
+    })
+
     try:
         client = wrap_openai(AsyncOpenAI(api_key=api_key))
         response = await client.chat.completions.create(
             model=settings.openai_text_model,
             temperature=0,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a dental clinic administrative assistant. "
-                        "Answer only using the provided knowledge base. "
-                        "If the answer is absent, "
-                        "say that an administrator will clarify. "
-                        "Never provide medical advice. "
-                        f"Answer in {language}."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Knowledge base:\n{knowledge}\n\nQuestion:\n{question}",
-                },
-            ],
+            messages=messages,
         )
         answer = response.choices[0].message.content
         return answer.strip() if answer else None
@@ -284,3 +317,21 @@ def _format_section_answer(section: str, language: Language) -> str:
     if language == "uz":
         return normalized
     return normalized
+
+
+LANGUAGE_NAMES: dict[Language, str] = {
+    "ru": "русском",
+    "uz": "узбекском",
+    "en": "английском",
+}
+
+
+def _build_language_instruction(language: Language) -> str:
+    return (
+        f"Пользователь выбрал язык: {language}. "
+        f"Отвечай пользователю строго на выбранном языке. "
+        f"Если выбран ru — отвечай на русском. "
+        f"Если выбран uz — отвечай на узбекском. "
+        f"Если выбран en — отвечай на английском. "
+        "Не меняй язык ответа, если пользователь явно не попросил изменить язык."
+    )

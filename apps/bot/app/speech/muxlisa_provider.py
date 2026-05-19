@@ -66,7 +66,9 @@ class MuxlisaSpeechProvider:
         finally:
             await cleanup_temp_file(wav_path, reason="muxlisa_converted_wav_cleanup")
 
-    async def synthesize(self, text: str, language: str) -> TextToSpeechResult:
+    async def synthesize(
+        self, text: str, language: str, instructions: str | None = None
+    ) -> TextToSpeechResult:
         if len(text) > self.settings.muxlisa_tts_max_chars:
             max_chars = self.settings.muxlisa_tts_max_chars
             text = text[:max_chars].rsplit(" ", 1)[0] or text[:max_chars]

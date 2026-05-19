@@ -1,8 +1,7 @@
 # Copy this to /etc/caddy/Caddyfile or your Caddy config directory.
-# Replace bot.example.com with the actual domain.
-# After saving, run: caddy reload
+# Replace domains with actual ones. After saving, run: caddy reload
 
-bot.example.com {
+uz-stomatolog.liven8n.site {
     reverse_proxy 127.0.0.1:8000
 
     header {
@@ -12,6 +11,20 @@ bot.example.com {
     }
 
     log {
-        output file /var/log/caddy/bot-access.log
+        output file /var/log/caddy/uz-stomatolog-access.log
+    }
+}
+
+admin-uz-stomatolog.liven8n.site {
+    reverse_proxy 127.0.0.1:8000
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/admin-uz-stomatolog-access.log
     }
 }

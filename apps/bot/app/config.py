@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     dev_admin_tg_id: str | None = None
     bot_mode: Literal["webhook", "polling"] = "polling"
 
+    telegram_oidc_client_id: str = ""
+    telegram_oidc_client_secret: str = ""
+    telegram_oidc_redirect_uri: str = ""
+    telegram_admin_ids: str = ""
+    session_secret: str = ""
+    session_cookie_name: str = "uz_stomatolog_admin_session"
+    session_cookie_max_age_days: int = 30
+
     postgres_host: str = "postgres"
     postgres_port: int = 5432
     postgres_db: str = "dental_bot"

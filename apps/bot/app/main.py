@@ -6,7 +6,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.sessions import SessionMiddleware
 
+from app.admin import admin_router
 from app.config import get_settings
 from app.db.session import async_session_factory
 from app.logging import configure_logging
@@ -77,6 +79,15 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret or "change-me-in-production",
+    session_cookie=settings.session_cookie_name,
+    max_age=settings.session_cookie_max_age_days * 86400,
+    https_only=settings.app_env == "prod",
+    same_site="lax",
+)
+app.include_router(admin_router)
 register_telegram_webhook_route(app)
 
 

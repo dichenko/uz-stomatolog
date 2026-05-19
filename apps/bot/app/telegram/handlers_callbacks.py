@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.settings_reader import get_welcome_message
 from app.db.models import Conversation, User
 from app.db.repositories import UserRepository
 from app.services.booking import BookingFlowError, confirm_booking_slot
@@ -38,7 +39,16 @@ async def language_callback_handler(
     )
     await callback.answer()
 
-    response_text = text("language_saved", language)
+    welcome = ""
+    try:
+        welcome = await get_welcome_message(db_session, language)
+    except Exception:
+        pass
+
+    response_text = (
+        welcome.strip() if welcome.strip()
+        else text("language_saved", language)
+    )
     if isinstance(callback.message, Message):
         sent = await callback.message.answer(response_text)
         await save_outgoing_message(

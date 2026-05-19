@@ -49,7 +49,9 @@ class OpenAISpeechProvider:
         )
         return result
 
-    async def synthesize(self, text: str, language: str) -> TextToSpeechResult:
+    async def synthesize(
+        self, text: str, language: str, instructions: str | None = None
+    ) -> TextToSpeechResult:
         if len(text) > self.settings.openai_tts_max_chars:
             raise SpeechProviderError(
                 "OpenAI TTS input is too long: "
@@ -59,7 +61,9 @@ class OpenAISpeechProvider:
         started_at = time.perf_counter()
         result = await self._retry(
             operation="tts",
-            call=lambda: self._synthesize_once(text, language),
+            call=lambda: self._synthesize_once(
+                text, language, instructions
+            ),
         )
         logger.info(
             "speech_provider_call_succeeded",
@@ -99,13 +103,16 @@ class OpenAISpeechProvider:
             raw=_safe_model_dump(result),
         )
 
-    async def _synthesize_once(self, text: str, _language: str) -> TextToSpeechResult:
+    async def _synthesize_once(
+        self, text: str, _language: str, instructions: str | None = None
+    ) -> TextToSpeechResult:
         response_format = self.settings.openai_tts_response_format
+        resolved_instructions = instructions or self.settings.openai_tts_instructions
         response = await self._client_or_raise().audio.speech.create(
             model=self.settings.openai_tts_model,
             voice=self.settings.openai_tts_voice,
             input=text,
-            instructions=self.settings.openai_tts_instructions or "",
+            instructions=resolved_instructions or "",
             response_format=response_format,
             speed=self.settings.openai_tts_speed,
         )

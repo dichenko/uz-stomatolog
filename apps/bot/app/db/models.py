@@ -349,3 +349,36 @@ class ExecutionRun(Base):
     graph_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     tool_calls: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class AdminSetting(Base):
+    __tablename__ = "admin_settings"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, server_default="'{}'::jsonb"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_by_tg_id: Mapped[str | None] = mapped_column(Text)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    admin_tg_id: Mapped[str] = mapped_column(Text, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    setting_key: Mapped[str | None] = mapped_column(Text)
+    old_value: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    new_value: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    ip_address: Mapped[str | None] = mapped_column(Text)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

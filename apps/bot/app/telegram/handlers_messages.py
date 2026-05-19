@@ -6,6 +6,7 @@ from aiogram import F, Router
 from aiogram.types import FSInputFile, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.settings_reader import get_tts_prompt
 from app.config import get_settings
 from app.db.models import Conversation, User
 from app.db.models import Message as DbMessage
@@ -275,9 +276,16 @@ async def voice_handler(
         )
 
         try:
+            tts_instructions = ""
+            try:
+                tts_instructions = await get_tts_prompt(db_session, language)
+            except Exception:
+                pass
+
             tts_result = await providers.tts_for_language(language).synthesize(
                 graph_result.final_response_text,
                 language,
+                instructions=tts_instructions.strip() or None,
             )
             tts_original_path = tts_result.file_path
             voice_path = await _ensure_ogg(tts_original_path)

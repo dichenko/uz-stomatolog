@@ -15,7 +15,9 @@ class MockSpeechProvider:
             raw={"file_path": file_path},
         )
 
-    async def synthesize(self, text: str, language: str) -> TextToSpeechResult:
+    async def synthesize(
+        self, text: str, language: str, instructions: str | None = None
+    ) -> TextToSpeechResult:
         output_path = create_temp_audio_path(suffix=".mp3")
         output_path.write_bytes(b"mock-audio")
         return TextToSpeechResult(

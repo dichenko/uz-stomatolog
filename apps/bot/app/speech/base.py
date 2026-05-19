@@ -34,5 +34,7 @@ class SpeechToTextProvider(Protocol):
 
 
 class TextToSpeechProvider(Protocol):
-    async def synthesize(self, text: str, language: str) -> TextToSpeechResult:
+    async def synthesize(
+        self, text: str, language: str, instructions: str | None = None
+    ) -> TextToSpeechResult:
         ...
