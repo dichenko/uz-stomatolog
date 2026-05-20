@@ -86,9 +86,9 @@ class Settings(BaseSettings):
     yandex_tts_base_url: str = "https://tts.api.cloud.yandex.net"
     yandex_tts_model: str = "yandex-speechkit-tts-v1"
     yandex_tts_language: str = "ru-RU"
-    yandex_tts_voice: str = "marina"
-    yandex_tts_emotion: str = "friendly"
-    yandex_tts_speed: str = "0.95"
+    yandex_tts_voice: str = "alena"
+    yandex_tts_emotion: str = "good"
+    yandex_tts_speed: str = "1.15"
     yandex_tts_format: str = "oggopus"
     yandex_tts_timeout_ms: int = 60000
     yandex_tts_max_chars: int = 5000

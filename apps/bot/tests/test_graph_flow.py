@@ -281,7 +281,11 @@ async def test_graph_escalates_unknown_faq_without_admin_bot(session, monkeypatc
     async def no_openai_answer(**_kwargs):
         return None
 
+    async def no_llm_router(**_kwargs):
+        return None
+
     monkeypatch.setattr("app.services.faq._try_openai_answer", no_openai_answer)
+    monkeypatch.setattr("app.graph.intents._try_llm_classify_intent", no_llm_router)
 
     await load_clinic_knowledge_if_empty(session)
     user = await UserRepository(session).upsert_from_telegram(

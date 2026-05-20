@@ -13,12 +13,15 @@ logger = logging.getLogger(__name__)
 
 
 class YandexSpeechKitProvider:
+    _config_logged = False
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
     async def synthesize(
         self, text: str, language: str, instructions: str | None = None
     ) -> TextToSpeechResult:
+        self._log_config_once()
         prepared_text = _prepare_text_for_tts(text)
         if not prepared_text:
             raise SpeechProviderError("Yandex SpeechKit TTS input is empty")
@@ -74,7 +77,7 @@ class YandexSpeechKitProvider:
                 data=payload,
             )
         if response.status_code >= 400:
-            raise _yandex_error(response)
+            raise self._yandex_error(response)
         return response.content
 
     def _api_key_or_raise(self) -> str:
@@ -92,6 +95,45 @@ class YandexSpeechKitProvider:
     def _base_url(self) -> str:
         return self.settings.yandex_tts_base_url.rstrip("/")
 
+    def _log_config_once(self) -> None:
+        if YandexSpeechKitProvider._config_logged:
+            return
+        YandexSpeechKitProvider._config_logged = True
+        logger.info(
+            "yandex_tts_config",
+            extra={
+                "voice": self.settings.yandex_tts_voice,
+                "emotion": self.settings.yandex_tts_emotion,
+                "speed": self.settings.yandex_tts_speed,
+                "format": self.settings.yandex_tts_format,
+            },
+        )
+
+    def _yandex_error(self, response: httpx.Response) -> "YandexSpeechKitStatusError":
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type:
+            try:
+                body: Any = response.json()
+            except ValueError:
+                body = response.text
+        else:
+            body = response.text
+        logger.error(
+            "yandex_tts_failed",
+            extra={
+                "status_code": response.status_code,
+                "body": str(body)[:1000],
+                "voice": self.settings.yandex_tts_voice,
+                "emotion": self.settings.yandex_tts_emotion,
+                "speed": self.settings.yandex_tts_speed,
+                "format": self.settings.yandex_tts_format,
+            },
+        )
+        return YandexSpeechKitStatusError(
+            f"Yandex SpeechKit TTS failed: status={response.status_code}, body={body}",
+            response.status_code,
+        )
+
 
 class YandexSpeechKitStatusError(RuntimeError):
     def __init__(self, message: str, status_code: int) -> None:
@@ -99,32 +141,20 @@ class YandexSpeechKitStatusError(RuntimeError):
         self.status_code = status_code
 
 
-def _yandex_error(response: httpx.Response) -> YandexSpeechKitStatusError:
-    content_type = response.headers.get("content-type", "")
-    if "application/json" in content_type:
-        try:
-            body: Any = response.json()
-        except ValueError:
-            body = response.text
-    else:
-        body = response.text
-    return YandexSpeechKitStatusError(
-        f"Yandex SpeechKit TTS failed: status={response.status_code}, body={body}",
-        response.status_code,
-    )
-
-
 def _prepare_text_for_tts(text: str) -> str:
     prepared = text.strip()
     prepared = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", prepared)
     prepared = re.sub(r"https?://\S+", "", prepared)
+    prepared = re.sub(r"[\U0001F300-\U0001FAFF\U00002700-\U000027BF]", "", prepared)
     prepared = prepared.replace("**", "")
     prepared = prepared.replace("__", "")
     prepared = prepared.replace("`", "")
-    prepared = prepared.replace("•", ". ")
+    prepared = prepared.replace("\u2022", ". ")
     prepared = prepared.replace("-", " ")
-    prepared = prepared.replace("₽", " рублей")
-    prepared = prepared.replace("$", " долларов")
-    prepared = prepared.replace("%", " процентов")
+    prepared = prepared.replace("\u20bd", " \u0440\u0443\u0431\u043b\u0435\u0439")
+    dollars = " \u0434\u043e\u043b\u043b\u0430\u0440\u043e\u0432"
+    percent = " \u043f\u0440\u043e\u0446\u0435\u043d\u0442\u043e\u0432"
+    prepared = prepared.replace("$", dollars)
+    prepared = prepared.replace("%", percent)
     prepared = re.sub(r"\s+", " ", prepared)
     return prepared.strip()

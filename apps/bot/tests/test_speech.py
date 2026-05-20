@@ -13,6 +13,10 @@ from app.speech.temp_files import (
     create_temp_audio_path,
     validate_file_size,
 )
+from app.speech.yandex_provider import (
+    YandexSpeechKitProvider,
+    YandexSpeechKitStatusError,
+)
 
 
 def test_speech_factory_routes_languages_to_expected_providers():
@@ -124,7 +128,7 @@ async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
             yandex_tts_timeout_ms=12000,
         )
     )
-    result = await providers.yandex.synthesize("**Здравствуйте** - тест", "ru")
+    result = await providers.yandex.synthesize("**Hello** - test", "ru")
 
     assert Path(result.file_path).read_bytes() == b"ogg-opus-bytes"
     assert result.provider == "yandex"
@@ -135,11 +139,11 @@ async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
             "url": "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize",
             "headers": {"Authorization": "Api-Key test-key"},
             "data": {
-                "text": "Здравствуйте тест",
+                "text": "Hello test",
                 "lang": "ru-RU",
-                "voice": "marina",
-                "emotion": "friendly",
-                "speed": "0.95",
+                "voice": "alena",
+                "emotion": "good",
+                "speed": "1.15",
                 "format": "oggopus",
             },
             "timeout": 12,
@@ -148,3 +152,100 @@ async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
 
     await cleanup_temp_file(result.file_path, reason="test_cleanup")
     test_dir.rmdir()
+
+
+async def test_yandex_tts_uses_custom_voice_settings(monkeypatch):
+    test_dir = _make_test_dir()
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "audio/ogg"}
+        content = b"voice"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, _url, *, headers, data):
+            calls.append(data)
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "app.speech.yandex_provider.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+
+    provider = YandexSpeechKitProvider(
+        Settings(
+            speech_temp_dir=str(test_dir),
+            yandex_speechkit_api_key="test-key",
+            yandex_tts_voice="ermil",
+            yandex_tts_emotion="good",
+            yandex_tts_speed="1.2",
+            yandex_tts_format="oggopus",
+        )
+    )
+    result = await provider.synthesize("Hello", "ru")
+
+    assert calls[0]["voice"] == "ermil"
+    assert calls[0]["emotion"] == "good"
+    assert calls[0]["speed"] == "1.2"
+    assert calls[0]["format"] == "oggopus"
+
+    await cleanup_temp_file(result.file_path, reason="test_cleanup")
+    test_dir.rmdir()
+
+
+async def test_yandex_tts_logs_error_settings_without_api_key(monkeypatch, caplog):
+    class FakeResponse:
+        status_code = 400
+        headers = {"content-type": "text/plain"}
+        text = "bad voice"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, _url, *, headers, data):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "app.speech.yandex_provider.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+
+    provider = YandexSpeechKitProvider(
+        Settings(
+            yandex_speechkit_api_key="secret-key",
+            yandex_tts_voice="alena",
+            yandex_tts_emotion="good",
+            yandex_tts_speed="1.15",
+        )
+    )
+
+    with caplog.at_level("ERROR", logger="app.speech.yandex_provider"):
+        with pytest.raises(YandexSpeechKitStatusError):
+            await provider.synthesize("Hello", "ru")
+
+    record = next(
+        item for item in caplog.records if item.message == "yandex_tts_failed"
+    )
+    assert record.status_code == 400
+    assert record.body == "bad voice"
+    assert record.voice == "alena"
+    assert record.emotion == "good"
+    assert record.speed == "1.15"
+    assert "secret-key" not in caplog.text
