@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.calendar import GoogleCalendarService
 from app.db.models import Conversation, User
-from app.db.repositories import ConversationRepository, EscalationRepository
+from app.db.repositories import (
+    AppointmentRepository,
+    ConversationRepository,
+    EscalationRepository,
+)
 from app.graph.intents import classify_intent_text
 from app.graph.state import BotState
 from app.services.admin_notify import send_admin_notification
@@ -55,7 +59,12 @@ def build_nodes(
     async def classify_intent(state: BotState) -> dict[str, Any]:
         text_intent = classify_intent_text(state["input_text"])
         if is_booking_in_progress(conversation):
-            exit_intents = ("admin_faq", "cancel_appointment", "reschedule_appointment")
+            exit_intents = (
+                "admin_faq",
+                "view_appointments",
+                "cancel_appointment",
+                "reschedule_appointment",
+            )
             if text_intent in exit_intents:
                 await ConversationRepository(session).update_state(
                     conversation_id=conversation.id,
@@ -67,7 +76,7 @@ def build_nodes(
             else:
                 intent = "book_appointment"
         elif is_rescheduling_in_progress(conversation):
-            if text_intent in ("admin_faq", "cancel_appointment"):
+            if text_intent in ("admin_faq", "view_appointments", "cancel_appointment"):
                 await ConversationRepository(session).update_state(
                     conversation_id=conversation.id,
                     current_flow=None,
@@ -186,6 +195,34 @@ def build_nodes(
             ],
         }
 
+    async def view_appointments(state: BotState) -> dict[str, Any]:
+        language = state["preferred_language"]
+        appointments = await AppointmentRepository(session).get_active_future_by_user(
+            user_id=user.id
+        )
+        if not appointments:
+            response_text = text("appointments_empty", language)
+            active_appointments = []
+        else:
+            lines = [text("appointments_header", language)]
+            active_appointments = []
+            for appointment in appointments:
+                active_appointments.append(_appointment_to_dict(appointment))
+                start = appointment.start_at.strftime("%Y-%m-%d %H:%M")
+                lines.append(
+                    f"- {start}: {appointment.service_type}, "
+                    f"{appointment.doctor_type}"
+                )
+            response_text = "\n".join(lines)
+        return {
+            "final_response_text": response_text,
+            "active_appointments": active_appointments,
+            "tool_calls": [
+                *state["tool_calls"],
+                {"tool": "find_user_appointments", "status": "success"},
+            ],
+        }
+
     async def reschedule_appointment(state: BotState) -> dict[str, Any]:
         language = state["preferred_language"]
         result = await handle_reschedule_message(
@@ -230,6 +267,7 @@ def build_nodes(
         "classify_intent": classify_intent,
         "safety_guard": safety_guard,
         "admin_faq": admin_faq,
+        "view_appointments": view_appointments,
         "start_booking": start_booking,
         "continue_booking": start_booking,
         "cancel_appointment": cancel_appointment,
@@ -346,6 +384,8 @@ def route_intent(state: BotState) -> str:
         return "emergency_or_escalation"
     if intent == "medical_question":
         return "admin_faq"
+    if intent == "view_appointments":
+        return "view_appointments"
     if intent == "book_appointment":
         return "start_booking"
     if intent == "cancel_appointment":
@@ -357,6 +397,21 @@ def route_intent(state: BotState) -> str:
     if intent == "unknown":
         return "emergency_or_escalation"
     return "fallback"
+
+
+def _appointment_to_dict(appointment: Any) -> dict[str, Any]:
+    return {
+        "id": appointment.id,
+        "start_at": appointment.start_at.isoformat(),
+        "end_at": appointment.end_at.isoformat(),
+        "timezone": appointment.timezone,
+        "service_type": appointment.service_type,
+        "doctor_type": appointment.doctor_type,
+        "patient_name": appointment.patient_name,
+        "status": appointment.status,
+        "calendar_event_id": appointment.calendar_event_id,
+        "formatted": appointment.start_at.strftime("%d.%m %H:%M"),
+    }
 
 
 def _detect_service_type(input_text: str) -> str:

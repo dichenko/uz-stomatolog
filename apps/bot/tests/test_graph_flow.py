@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -5,6 +6,7 @@ from sqlalchemy import select
 from app.config import Settings
 from app.db.models import Escalation, ExecutionRun
 from app.db.repositories import (
+    AppointmentRepository,
     ConversationRepository,
     MessageRepository,
     UserRepository,
@@ -26,6 +28,7 @@ class FakeAdminBot:
 def test_intent_classifier_detects_core_flows():
     assert classify_intent_text("How much does cleaning cost?") == "admin_faq"
     assert classify_intent_text("I want to book an appointment") == "book_appointment"
+    assert classify_intent_text("какие у меня есть записи?") == "view_appointments"
     assert classify_intent_text("Cancel my appointment") == "cancel_appointment"
     assert classify_intent_text("What medicine should I take?") == "medical_question"
 
@@ -110,6 +113,50 @@ async def test_graph_starts_booking_controlled_flow(session):
     assert result.metadata["doctor_type"] == "therapist"
     assert result.metadata["missing_fields"] == ["patient_name", "phone"]
     assert "patient" in result.final_response_text.casefold()
+
+
+async def test_graph_lists_user_appointments_by_telegram_user(session):
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1010,
+        preferred_language="ru",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1010,
+    )
+    await ConversationRepository(session).update_state(
+        conversation_id=conversation.id,
+        current_flow="booking",
+        current_state="collecting_patient",
+        summary='{"service_type": "cleaning"}',
+    )
+    start_at = datetime.now(UTC) + timedelta(days=2)
+    appointment = await AppointmentRepository(session).create(
+        user_id=user.id,
+        service_type="cleaning",
+        doctor_type="therapist",
+        start_at=start_at,
+        end_at=start_at + timedelta(minutes=60),
+        patient_name="Михаил",
+        primary_phone="+998901234567",
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-view-appointments",
+        telegram_chat_id=1010,
+        input_text="посмотрите какие у меня есть записи, я же записывался уже",
+        input_type="text",
+        preferred_language="ru",
+        telegram_profile={},
+    )
+
+    assert result.intent == "view_appointments"
+    assert result.metadata["active_appointments"][0]["id"] == appointment.id
+    assert "Ваши активные записи" in result.final_response_text
+    assert conversation.current_flow is None
 
 
 async def test_graph_refuses_medical_advice(session, monkeypatch):

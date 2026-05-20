@@ -90,6 +90,7 @@ def _compile_graph(
     workflow.add_node("classify_intent", nodes["classify_intent"])
     workflow.add_node("safety_guard", nodes["safety_guard"])
     workflow.add_node("admin_faq", nodes["admin_faq"])
+    workflow.add_node("view_appointments", nodes["view_appointments"])
     workflow.add_node("start_booking", nodes["start_booking"])
     workflow.add_node("continue_booking", nodes["continue_booking"])
     workflow.add_node("cancel_appointment", nodes["cancel_appointment"])
@@ -105,6 +106,7 @@ def _compile_graph(
         route_intent,
         {
             "admin_faq": "admin_faq",
+            "view_appointments": "view_appointments",
             "start_booking": "start_booking",
             "cancel_appointment": "cancel_appointment",
             "reschedule_appointment": "reschedule_appointment",
@@ -114,6 +116,7 @@ def _compile_graph(
     )
     for terminal_node in (
         "admin_faq",
+        "view_appointments",
         "start_booking",
         "cancel_appointment",
         "reschedule_appointment",

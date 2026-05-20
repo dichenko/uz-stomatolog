@@ -2,6 +2,7 @@ from typing import Literal
 
 Intent = Literal[
     "admin_faq",
+    "view_appointments",
     "book_appointment",
     "cancel_appointment",
     "reschedule_appointment",
@@ -23,6 +24,24 @@ BOOKING_KEYWORDS = (
     "qabul",
     "book",
     "appointment",
+)
+VIEW_APPOINTMENTS_KEYWORDS = (
+    "мои записи",
+    "моя запись",
+    "мои приёмы",
+    "мои приемы",
+    "есть записи",
+    "какие записи",
+    "посмотрите какие",
+    "записывался",
+    "записывалась",
+    "yozuvlarim",
+    "yozilganman",
+    "qabulim",
+    "my appointments",
+    "my appointment",
+    "do i have appointments",
+    "already booked",
 )
 CANCEL_KEYWORDS = ("отмен", "бекор", "cancel")
 RESCHEDULE_KEYWORDS = ("перен", "друг", "ko'chir", "reschedule", "move")
@@ -65,6 +84,8 @@ def classify_intent_text(text: str) -> Intent:
         return "cancel_appointment"
     if _contains_any(normalized, RESCHEDULE_KEYWORDS):
         return "reschedule_appointment"
+    if _contains_any(normalized, VIEW_APPOINTMENTS_KEYWORDS):
+        return "view_appointments"
     if _contains_any(normalized, BOOKING_KEYWORDS):
         return "book_appointment"
     if _contains_any(normalized, DISCOUNT_KEYWORDS):
