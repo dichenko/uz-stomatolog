@@ -5,7 +5,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from app.db.models import Appointment, ReminderJob, UserPhone
-from app.db.repositories import ConversationRepository, UserRepository
+from app.db.repositories import (
+    ConversationRepository,
+    MessageRepository,
+    UserRepository,
+)
 from app.services.booking import (
     BookingSlotConflictError,
     confirm_booking_slot,
@@ -79,6 +83,27 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
         calendar_service=calendar,
         now=now,
     )
+    await MessageRepository(session).save_message(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        telegram_message_id=10,
+        direction="in",
+        message_type="text",
+        language="en",
+        text="How much is cleaning and can I book it?",
+        trace_id="booking-test-1",
+    )
+    await MessageRepository(session).save_message(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        telegram_message_id=11,
+        direction="in",
+        message_type="text",
+        language="en",
+        text="Ali Karimov +998 90 123 45 67",
+        trace_id="booking-test-2",
+    )
+    admin_bot = FakeAdminBot()
     confirmation = await confirm_booking_slot(
         session=session,
         user=user,
@@ -86,7 +111,7 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
         slot_index=0,
         language="en",
         calendar_service=calendar,
-        admin_bot=FakeAdminBot(),
+        admin_bot=admin_bot,
         now=now,
     )
 
@@ -108,6 +133,14 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
     }
     assert calendar.created_events[0].appointment_id == confirmation.appointment.id
     assert "confirmed" in confirmation.text.casefold()
+    assert "Service: cleaning" in confirmation.text
+    assert "Specialist: therapist" in confirmation.text
+    assert "Duration: 60 minutes" in confirmation.text
+    assert "We look forward to seeing you at our clinic." in confirmation.text
+    assert "Conversation summary:" in admin_bot.messages[0]["text"]
+    assert "How much is cleaning and can I book it?" in admin_bot.messages[0]["text"]
+    assert "Final booking: service=cleaning" in admin_bot.messages[0]["text"]
+    assert "[phone]" in admin_bot.messages[0]["text"]
 
 
 def test_booking_keyboards_render_expected_buttons():

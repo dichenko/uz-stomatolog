@@ -21,6 +21,7 @@ from app.db.models import Appointment, Conversation, User
 from app.db.repositories import (
     AppointmentRepository,
     ConversationRepository,
+    MessageRepository,
     ReminderRepository,
     UserRepository,
 )
@@ -127,6 +128,14 @@ async def confirm_booking_slot(
     service_type = str(draft["service_type"])
     doctor_type = str(draft["doctor_type"])
     timezone = str(slot.get("timezone") or get_settings().app_timezone)
+    conversation_summary = await _build_booking_conversation_summary(
+        session=session,
+        conversation=conversation,
+        draft=draft,
+        start_at=start_at,
+        end_at=end_at,
+        timezone=timezone,
+    )
 
     resolved_calendar_service = _resolve_calendar_service(calendar_service)
     if resolved_calendar_service is not None:
@@ -154,7 +163,7 @@ async def confirm_booking_slot(
         timezone=timezone,
         patient_name=str(draft["patient_name"]),
         primary_phone=str(draft["phone"]),
-        conversation_summary=_booking_summary(draft),
+        conversation_summary=conversation_summary,
         created_trace_id=str(draft.get("trace_id") or ""),
     )
     await UserRepository(session).add_phone(
@@ -178,7 +187,7 @@ async def confirm_booking_slot(
                 telegram_user_id=user.telegram_user_id,
                 telegram_username=user.telegram_username,
                 language=language,
-                conversation_summary=_booking_summary(draft),
+                conversation_summary=conversation_summary,
                 appointment_id=appointment.id,
                 trace_id=str(draft.get("trace_id") or ""),
             )
@@ -201,7 +210,7 @@ async def confirm_booking_slot(
         conversation_id=conversation.id,
         current_flow=None,
         current_state=None,
-        summary=_booking_summary(draft),
+        summary=conversation_summary,
     )
     return BookingConfirmationResult(
         text=_booking_confirmation_text(language, appointment),
@@ -395,7 +404,9 @@ def _slot_proposal_text(language: Language) -> str:
     }[language]
 
 
-def _booking_confirmation_text(language: Language, appointment: Appointment) -> str:
+def _legacy_booking_confirmation_text(
+    language: Language, appointment: Appointment
+) -> str:
     start = appointment.start_at.astimezone(ZoneInfo(appointment.timezone))
     formatted = start.strftime("%Y-%m-%d %H:%M")
     return {
@@ -444,6 +455,142 @@ def _booking_admin_notification(
 
 def _appointment_duration_minutes(appointment: Appointment) -> int:
     return int((appointment.end_at - appointment.start_at).total_seconds() // 60)
+
+
+def _booking_confirmation_text(language: Language, appointment: Appointment) -> str:
+    start = appointment.start_at.astimezone(ZoneInfo(appointment.timezone))
+    formatted = start.strftime("%Y-%m-%d %H:%M")
+    duration = _appointment_duration_minutes(appointment)
+    service = _service_label(appointment.service_type, language)
+    doctor = _doctor_label(appointment.doctor_type, language)
+    return {
+        "ru": (
+            "\u0412\u0430\u0448\u0430 \u0437\u0430\u043f\u0438\u0441\u044c "
+            f"\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434"
+            f"\u0435\u043d\u0430: {formatted}.\n"
+            f"\u0423\u0441\u043b\u0443\u0433\u0430: {service}.\n"
+            f"\u0421\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442: "
+            f"{doctor}.\n"
+            f"\u0414\u043b\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441"
+            f"\u0442\u044c: {duration} "
+            "\u043c\u0438\u043d\u0443\u0442.\n"
+            "\u0421 \u043d\u0435\u0442\u0435\u0440\u043f\u0435\u043d\u0438"
+            "\u0435\u043c \u0436\u0434\u0435\u043c \u0432\u0430\u0441 "
+            "\u0432 \u043d\u0430\u0448\u0435\u0439 "
+            "\u043a\u043b\u0438\u043d\u0438\u043a\u0435."
+        ),
+        "uz": (
+            f"Qabulingiz tasdiqlandi: {formatted}.\n"
+            f"Xizmat: {service}.\n"
+            f"Mutaxassis: {doctor}.\n"
+            f"Davomiyligi: {duration} daqiqa.\n"
+            "Sizni klinikamizda kutamiz."
+        ),
+        "en": (
+            f"Your appointment is confirmed for {formatted}.\n"
+            f"Service: {service}.\n"
+            f"Specialist: {doctor}.\n"
+            f"Duration: {duration} minutes.\n"
+            "We look forward to seeing you at our clinic."
+        ),
+    }[language]
+
+
+async def _build_booking_conversation_summary(
+    *,
+    session: AsyncSession,
+    conversation: Conversation,
+    draft: dict[str, Any],
+    start_at: datetime,
+    end_at: datetime,
+    timezone: str,
+) -> str:
+    messages = await MessageRepository(session).get_recent_for_conversation(
+        conversation_id=conversation.id,
+        limit=20,
+    )
+    user_messages = [
+        _clean_summary_message(message.text or "")
+        for message in messages
+        if message.direction == "in"
+    ]
+    user_messages = [message for message in user_messages if message]
+    if user_messages:
+        asked_about = "; ".join(_unique_preserve_order(user_messages)[-4:])
+    else:
+        asked_about = "booking an appointment"
+
+    start = start_at.astimezone(ZoneInfo(timezone))
+    duration = int((end_at - start_at).total_seconds() // 60)
+    return (
+        f"User discussed: {asked_about}. "
+        f"Final booking: service={draft.get('service_type')}, "
+        f"doctor={draft.get('doctor_type')}, duration={duration} min, "
+        f"time={start.strftime('%Y-%m-%d %H:%M')}, "
+        f"patient={draft.get('patient_name')}, phone={draft.get('phone')}."
+    )
+
+
+def _clean_summary_message(message: str) -> str:
+    cleaned = re.sub(r"(?:\+?\d[\d\s().-]{7,}\d)", "[phone]", message)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;:-")
+    if not cleaned or cleaned == "[phone]":
+        return ""
+    if len(cleaned) > 120:
+        cleaned = cleaned[:117].rstrip() + "..."
+    return cleaned
+
+
+def _unique_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        key = item.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _service_label(service_type: str, language: Language) -> str:
+    labels = {
+        "consultation": {
+            "ru": (
+                "\u043a\u043e\u043d\u0441\u0443\u043b\u044c"
+                "\u0442\u0430\u0446\u0438\u044f"
+            ),
+            "uz": "konsultatsiya",
+            "en": "consultation",
+        },
+        "cleaning": {
+            "ru": "\u0447\u0438\u0441\u0442\u043a\u0430",
+            "uz": "tish tozalash",
+            "en": "cleaning",
+        },
+        "treatment": {
+            "ru": "\u043b\u0435\u0447\u0435\u043d\u0438\u0435",
+            "uz": "davolash",
+            "en": "treatment",
+        },
+    }
+    return labels.get(service_type, {}).get(language, service_type)
+
+
+def _doctor_label(doctor_type: str, language: Language) -> str:
+    labels = {
+        "therapist": {
+            "ru": "\u0442\u0435\u0440\u0430\u043f\u0435\u0432\u0442",
+            "uz": "terapevt",
+            "en": "therapist",
+        },
+        "surgeon": {
+            "ru": "\u0445\u0438\u0440\u0443\u0440\u0433",
+            "uz": "jarroh",
+            "en": "surgeon",
+        },
+    }
+    return labels.get(doctor_type, {}).get(language, doctor_type)
 
 
 class BookingFlowError(RuntimeError):
