@@ -98,7 +98,12 @@ def is_admin(tg_id: str, settings: Settings | None = None) -> bool:
     resolved = settings or get_settings()
     if not resolved.telegram_admin_ids:
         return False
-    return tg_id in {aid.strip() for aid in resolved.telegram_admin_ids.split(",") if aid.strip()}
+    allowed = {
+        aid.strip()
+        for aid in resolved.telegram_admin_ids.split(",")
+        if aid.strip()
+    }
+    return tg_id in allowed
 
 
 SESSION_KEY_TG_ID = "tg_id"
