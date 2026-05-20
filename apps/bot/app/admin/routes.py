@@ -311,10 +311,12 @@ def _render_login_page() -> str:
     return _base_html(
         title="Вход",
         body="""
-        <div class="login-box">
-            <h2>uz-stomatolog Admin</h2>
-            <a href="/admin/auth/telegram/start" class="tg-btn">Войти через Telegram</a>
-        </div>
+        <main class="content">
+            <div class="card login-card">
+                <h2>uz-stomatolog Admin</h2>
+                <a href="/admin/auth/telegram/start" class="tg-btn">Войти через Telegram</a>
+            </div>
+        </main>
         """,
     )
 
@@ -332,29 +334,33 @@ def _render_page(
     if single_field:
         text = str(data) if isinstance(data, str) else str(data.get("text", ""))
         escaped = _js_escape(text)
-        fields_html = f'<div class="field field-large">{_textarea_content("text", "Текст", escaped, "ta-large")}</div>'
+        fields_html = f'<div class="field-group field-fill">{_textarea_content("text", "Текст", escaped, "ta-large")}</div>'
         init_js = f'document.getElementById("field-text").value = "{escaped}";'
-        page_class = "page page-large"
-        form_class = "form-large"
+        card_class = "card card-fill"
+        form_class = "form-fill"
+        content_class = "content content-wide"
     else:
         labels = {"ru": "Русский", "uz": "Узбекский", "en": "Английский"}
         for lang, label in labels.items():
             val = str(data.get(lang, "")) if isinstance(data, dict) else ""
             escaped = _js_escape(val)
-            fields_html += f'<div class="field">{_textarea_content(f"lang-{lang}", label, escaped, "ta-multi")}</div>'
+            fields_html += f'<div class="field-group">{_textarea_content(f"lang-{lang}", label, escaped, "ta-multi")}</div>'
             init_js += f'document.getElementById("field-lang-{lang}").value = "{escaped}";'
-        page_class = "page"
+        card_class = "card"
         form_class = ""
+        content_class = "content"
 
     body = f"""
-    <div class="{page_class}">
-        <h2>{title}</h2>
-        <form id="settings-form" onsubmit="return saveSettings(event)" class="{form_class}">
-            {fields_html}
-            <button type="submit" class="save-btn">Сохранить</button>
-            <div id="msg" class="msg"></div>
-        </form>
-    </div>
+    <main class="{content_class}">
+        <div class="{card_class}">
+            <h2>{title}</h2>
+            <form id="settings-form" onsubmit="return saveSettings(event)"{(' class="' + form_class + '"' if form_class else "")}>
+                {fields_html}
+                <button type="submit" class="btn-save">Сохранить</button>
+                <div id="msg" class="msg"></div>
+            </form>
+        </div>
+    </main>
 
     <script>
     {init_js}
@@ -380,20 +386,20 @@ def _render_page(
                 body: JSON.stringify(body),
             }});
             if (resp.ok) {{
-                msg.className = 'msg success';
+                msg.className = 'msg toast toast-success';
                 msg.textContent = 'Сохранено';
             }} else {{
-                msg.className = 'msg error';
+                msg.className = 'msg toast toast-error';
                 msg.textContent = 'Ошибка: ' + resp.status;
             }}
         }} catch(err) {{
-            msg.className = 'msg error';
+            msg.className = 'msg toast toast-error';
             msg.textContent = 'Ошибка сети';
         }}
     }}
     </script>
     """
-    return _base_html(title=title, body=body, is_page=True, large=single_field)
+    return _base_html(title=title, body=body, is_page=True)
 
 
 def _textarea_content(id: str, label: str, value: str, css_class: str = "ta") -> str:
@@ -406,18 +412,19 @@ def _base_html(
     title: str = "",
     body: str = "",
     is_page: bool = False,
-    large: bool = False,
 ) -> str:
     nav = ""
     if is_page:
         nav = """
         <nav>
+            <span class="nav-brand">Admin</span>
             <a href="/admin/system-prompt">Системный промпт</a>
             <a href="/admin/welcome-messages">Первое сообщение</a>
             <a href="/admin/tts-prompts">Промпты TTS</a>
             <a href="/admin/clinic-info">Справка о клинике</a>
-            <form action="/admin/auth/logout" method="POST" style="display:inline">
-                <button type="submit" class="logout-btn">Выйти</button>
+            <span class="nav-spacer"></span>
+            <form action="/admin/auth/logout" method="POST">
+                <button type="submit" class="btn-logout">Выйти</button>
             </form>
         </nav>
         """
@@ -428,35 +435,222 @@ def _base_html(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} – uz-stomatolog Admin</title>
 <style>
+  :root {{
+    --bg: #f0f2f5;
+    --card-bg: #fff;
+    --text: #1a1a2e;
+    --text-secondary: #6b7280;
+    --border: #d1d5db;
+    --accent: #2AABEE;
+    --accent-hover: #229ED9;
+    --success: #27ae60;
+    --danger: #c0392b;
+    --nav-bg: #1a1a2e;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+  }}
+
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; min-height: 100vh; }}
-  body.large {{ display: flex; flex-direction: column; }}
-  nav {{ display: flex; gap: 16px; flex-wrap: wrap; background: #1a1a2e; padding: 12px 24px; }}
-  nav a {{ color: #e0e0e0; text-decoration: none; font-size: 14px; }}
-  nav a:hover {{ color: #fff; }}
-  .logout-btn {{ background: #c0392b; color: #fff; border: none; padding: 4px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }}
-  .login-box {{ max-width: 400px; margin: 100px auto; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.1); text-align: center; }}
-  .login-box h2 {{ margin-bottom: 24px; }}
-  .tg-btn {{ display: inline-block; background: #2AABEE; color: #fff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: 600; }}
-  .tg-btn:hover {{ background: #229ED9; }}
-  .page {{ max-width: 800px; margin: 24px auto; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }}
-  .page-large {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 24px; max-width: 80vw; }}
-  .page h2 {{ margin-bottom: 20px; }}
-  .form-large {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}
-  .field {{ margin-bottom: 16px; }}
-  .field-large {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}
-  .field label {{ display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }}
-  .ta {{ width: 100%; min-height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; resize: vertical; font-family: inherit; }}
-  .ta-large {{ flex: 1; min-height: 0; resize: vertical; overflow-y: auto; width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; font-family: inherit; }}
-  .ta-multi {{ min-height: 240px; width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; resize: vertical; font-family: inherit; }}
-  .save-btn {{ background: #27ae60; color: #fff; border: none; padding: 10px 28px; border-radius: 6px; font-size: 15px; cursor: pointer; }}
-  .save-btn:hover {{ background: #219a52; }}
-  .msg {{ margin-top: 12px; padding: 8px 12px; border-radius: 4px; font-size: 14px; }}
-  .msg.success {{ background: #d4edda; color: #155724; }}
-  .msg.error {{ background: #f8d7da; color: #721c24; }}
+
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }}
+
+  nav {{
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+    background: var(--nav-bg);
+    padding: 0 32px;
+    height: 52px;
+    flex-shrink: 0;
+  }}
+  nav a {{
+    color: #c4c6d0;
+    text-decoration: none;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+  }}
+  nav a:hover {{ background: rgba(255,255,255,0.08); color: #fff; }}
+  .nav-brand {{
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    margin-right: 16px;
+    letter-spacing: -0.3px;
+  }}
+  .nav-spacer {{ flex: 1; }}
+  .btn-logout {{
+    background: transparent;
+    color: #e88;
+    border: 1px solid rgba(238,136,136,0.3);
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+  }}
+  .btn-logout:hover {{ background: rgba(238,136,136,0.12); }}
+
+  .content {{
+    flex: 1;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+  }}
+  .content-wide {{ max-width: 86vw; }}
+
+  .card {{
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 36px 40px;
+  }}
+  .card-fill {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }}
+  .card h2 {{
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 28px;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }}
+
+  .login-card {{
+    max-width: 400px;
+    margin: auto;
+    text-align: center;
+    padding: 48px 40px;
+  }}
+  .tg-btn {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: #fff;
+    padding: 12px 36px;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 0.15s, transform 0.1s;
+    gap: 8px;
+  }}
+  .tg-btn:hover {{ background: var(--accent-hover); transform: translateY(-1px); }}
+  .tg-btn:active {{ transform: translateY(0); }}
+
+  .form-fill {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }}
+
+  .field-group {{
+    margin-bottom: 20px;
+  }}
+  .field-group:last-of-type {{ margin-bottom: 20px; }}
+  .field-fill {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-bottom: 20px;
+  }}
+  .field-group label {{
+    display: block;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }}
+
+  textarea {{
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.65;
+    resize: vertical;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    color: var(--text);
+    background: #fafbfc;
+  }}
+  textarea:focus {{
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(42,171,238,0.14);
+    background: #fff;
+  }}
+  .ta-large {{
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    resize: vertical;
+  }}
+  .ta-multi {{
+    min-height: 240px;
+  }}
+
+  .btn-save {{
+    background: var(--success);
+    color: #fff;
+    border: none;
+    padding: 11px 32px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    align-self: flex-start;
+    flex-shrink: 0;
+  }}
+  .btn-save:hover {{ background: #219a52; transform: translateY(-1px); }}
+  .btn-save:active {{ transform: translateY(0); }}
+
+  .msg {{ margin-top: 14px; flex-shrink: 0; }}
+  .toast {{
+    padding: 10px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+  }}
+  .toast-success {{ background: #d1fae5; color: #065f46; }}
+  .toast-error {{ background: #fee2e2; color: #991b1b; }}
+
+  @media (max-width: 640px) {{
+    nav {{ padding: 0 16px; gap: 2px; }}
+    nav a {{ font-size: 12px; padding: 6px 10px; }}
+    .nav-brand {{ margin-right: 8px; }}
+    .content {{ padding: 20px 12px; }}
+    .content-wide {{ max-width: 100%; }}
+    .card {{ padding: 24px 20px; }}
+  }}
 </style>
 </head>
-<body{' class="large"' if large else ""}>
+<body>
 {nav}
 {body}
 </body>
