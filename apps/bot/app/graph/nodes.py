@@ -11,7 +11,7 @@ from app.db.repositories import (
     ConversationRepository,
     EscalationRepository,
 )
-from app.graph.intents import classify_intent_text
+from app.graph.intents import classify_intent as classify_user_intent
 from app.graph.state import BotState
 from app.services.admin_notify import send_admin_notification
 from app.services.booking import handle_booking_message, is_booking_in_progress
@@ -57,7 +57,12 @@ def build_nodes(
         }
 
     async def classify_intent(state: BotState) -> dict[str, Any]:
-        text_intent = classify_intent_text(state["input_text"])
+        text_intent = await classify_user_intent(
+            state["input_text"],
+            language=state["preferred_language"],
+            current_flow=conversation.current_flow,
+            current_state=conversation.current_state,
+        )
         if is_booking_in_progress(conversation):
             exit_intents = (
                 "admin_faq",

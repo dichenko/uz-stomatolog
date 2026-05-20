@@ -12,7 +12,7 @@ from app.db.repositories import (
     UserRepository,
 )
 from app.graph import run_bot_graph
-from app.graph.intents import classify_intent_text
+from app.graph.intents import classify_intent, classify_intent_text
 from app.services.clinic_knowledge import load_clinic_knowledge_if_empty
 
 
@@ -31,6 +31,42 @@ def test_intent_classifier_detects_core_flows():
     assert classify_intent_text("какие у меня есть записи?") == "view_appointments"
     assert classify_intent_text("Cancel my appointment") == "cancel_appointment"
     assert classify_intent_text("What medicine should I take?") == "medical_question"
+
+
+async def test_hybrid_intent_classifier_uses_llm_router(monkeypatch):
+    async def fake_llm_router(**kwargs):
+        assert kwargs["text"] == "I was already scheduled, can you check it?"
+        assert kwargs["language"] == "en"
+        assert kwargs["current_flow"] == "booking"
+        return "view_appointments"
+
+    monkeypatch.setattr(
+        "app.graph.intents._try_llm_classify_intent",
+        fake_llm_router,
+    )
+
+    intent = await classify_intent(
+        "I was already scheduled, can you check it?",
+        language="en",
+        current_flow="booking",
+        current_state="collecting_patient",
+    )
+
+    assert intent == "view_appointments"
+
+
+async def test_hybrid_intent_classifier_falls_back_to_keywords(monkeypatch):
+    async def no_llm_router(**_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.graph.intents._try_llm_classify_intent",
+        no_llm_router,
+    )
+
+    intent = await classify_intent("I want to book an appointment", language="en")
+
+    assert intent == "book_appointment"
 
 
 async def test_graph_answers_faq_and_persists_execution_run(session, monkeypatch):
