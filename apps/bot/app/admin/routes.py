@@ -56,6 +56,17 @@ async def auth_telegram_callback(request: Request):
     code = request.query_params.get("code", "")
     state = request.query_params.get("state", "")
 
+    cookie_header = request.headers.get("cookie", "(none)")
+    logger.info(
+        "admin_callback_diag",
+        extra={
+            "cookie_header": cookie_header,
+            "session_keys": list(request.session.keys()),
+            "query_state": state,
+            "query_code_len": len(code),
+        },
+    )
+
     saved_state = request.session.pop("oidc_state", None)
     code_verifier = request.session.pop("oidc_code_verifier", None)
 
