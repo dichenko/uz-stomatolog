@@ -55,7 +55,7 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
         telegram_chat_id=2001,
     )
     calendar = FakeCalendarService()
-    now = datetime(2026, 5, 21, 8, 0, tzinfo=TZ)
+    now = datetime(2026, 5, 24, 8, 0, tzinfo=TZ)
 
     first = await handle_booking_message(
         session=session,
