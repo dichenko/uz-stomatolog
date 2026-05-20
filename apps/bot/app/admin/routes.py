@@ -440,7 +440,7 @@ def _base_html(
   .tg-btn {{ display: inline-block; background: #2AABEE; color: #fff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: 600; }}
   .tg-btn:hover {{ background: #229ED9; }}
   .page {{ max-width: 800px; margin: 24px auto; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }}
-  .page-large {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 24px; }}
+  .page-large {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 24px; max-width: 80vw; }}
   .page h2 {{ margin-bottom: 20px; }}
   .form-large {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}
   .field {{ margin-bottom: 16px; }}
