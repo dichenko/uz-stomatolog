@@ -73,6 +73,10 @@ async def auth_telegram_callback(request: Request):
 
         payload = await verify_id_token(settings, str(id_token))
         tg_id = get_tg_id_from_payload(payload)
+        logger.info(
+            "admin_login_check",
+            extra={"tg_id": tg_id, "admin_ids": settings.telegram_admin_ids or "(empty)"},
+        )
 
         async with _get_db_session() as session:
             await log_audit(
