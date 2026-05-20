@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models import (
     Appointment,
@@ -176,6 +177,33 @@ class MessageRepository:
         await self.session.flush()
         return message
 
+    async def get_recent_for_conversation(
+        self,
+        *,
+        conversation_id: int,
+        limit: int = 10,
+        exclude_message_id: int | None = None,
+    ) -> list[Message]:
+        stmt = (
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.text.is_not(None),
+                Message.text != "",
+                ~(
+                    (Message.direction == "out")
+                    & (Message.message_type == "voice")
+                ),
+            )
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(limit)
+        )
+        if exclude_message_id is not None:
+            stmt = stmt.where(Message.id != exclude_message_id)
+
+        result = await self.session.execute(stmt)
+        return list(reversed(result.scalars().all()))
+
 
 class AppointmentRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -235,6 +263,19 @@ class AppointmentRepository:
             stmt = stmt.where(Appointment.start_at >= now)
         result = await self.session.execute(stmt.order_by(Appointment.start_at))
         return list(result.scalars())
+
+    async def get_all_by_user_with_history(
+        self,
+        *,
+        user_id: int,
+    ) -> list[Appointment]:
+        result = await self.session.execute(
+            select(Appointment)
+            .where(Appointment.user_id == user_id)
+            .options(selectinload(Appointment.history))
+            .order_by(Appointment.start_at.desc(), Appointment.id.desc())
+        )
+        return list(result.scalars().unique())
 
     async def update_status(
         self,

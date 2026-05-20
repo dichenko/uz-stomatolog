@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.settings_reader import get_clinic_info, get_system_prompt
 from app.config import get_settings
+from app.db.models import Conversation, User
+from app.services.llm_context import (
+    LlmContext,
+    build_llm_context,
+    build_openai_context_messages,
+)
 from app.telegram.texts import Language, normalize_language
 
 logger = logging.getLogger(__name__)
@@ -168,10 +174,27 @@ async def generate_admin_faq_answer(
     language: str | None,
     knowledge: str,
     session: AsyncSession | None = None,
+    user: User | None = None,
+    conversation: Conversation | None = None,
+    input_message_id: int | None = None,
 ) -> FaqAnswer:
     normalized_language = normalize_language(language)
+    llm_context: LlmContext | None = None
 
-    if session is not None:
+    if session is not None and user is not None and conversation is not None:
+        try:
+            llm_context = await build_llm_context(
+                session=session,
+                user=user,
+                conversation=conversation,
+                exclude_message_id=input_message_id,
+            )
+        except Exception:
+            logger.exception("llm_context_build_failed")
+
+    if llm_context is not None and llm_context.clinic_info.strip():
+        knowledge = llm_context.clinic_info.strip()
+    elif session is not None:
         try:
             clinic_info = await get_clinic_info(session)
         except Exception:
@@ -192,6 +215,7 @@ async def generate_admin_faq_answer(
         language=normalized_language,
         knowledge=knowledge,
         session=session,
+        llm_context=llm_context,
     )
     if openai_answer is not None:
         return FaqAnswer(text=openai_answer, answered=True, source="openai")
@@ -225,6 +249,7 @@ async def _try_openai_answer(
     language: Language,
     knowledge: str,
     session: AsyncSession | None = None,
+    llm_context: LlmContext | None = None,
 ) -> str | None:
     settings = get_settings()
     if settings.openai_api_key is None:
@@ -235,16 +260,11 @@ async def _try_openai_answer(
         return None
 
     system_prompt = ""
-    clinic_info = ""
     if session is not None:
         try:
             system_prompt = await get_system_prompt(session)
         except Exception:
             logger.exception("admin_get_system_prompt_failed")
-        try:
-            clinic_info = await get_clinic_info(session)
-        except Exception:
-            logger.exception("admin_get_clinic_info_failed")
 
     messages: list[dict[str, str]] = [
         {
@@ -269,13 +289,7 @@ async def _try_openai_answer(
         }
     )
 
-    if clinic_info.strip() and clinic_info.strip() != knowledge.strip():
-        messages.append(
-            {
-                "role": "system",
-                "content": f"Справочная информация о клинике:\n\n{clinic_info.strip()}",
-            }
-        )
+    messages.extend(build_openai_context_messages(llm_context))
 
     messages.append(
         {

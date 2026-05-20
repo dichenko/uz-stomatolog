@@ -13,6 +13,7 @@ class BotState(TypedDict):
     telegram_chat_id: int
     input_text: str
     input_type: InputType
+    input_message_id: int | None
     preferred_language: Language
     telegram_profile: dict[str, Any]
 

@@ -35,6 +35,7 @@ async def run_bot_graph(
         telegram_chat_id=telegram_chat_id,
         input_text=input_text,
         input_type=input_type,
+        input_message_id=input_message_id,
         preferred_language=preferred_language,
         telegram_profile=telegram_profile,
     )
@@ -130,6 +131,7 @@ def _initial_state(
     telegram_chat_id: int,
     input_text: str,
     input_type: InputType,
+    input_message_id: int | None,
     preferred_language: Language,
     telegram_profile: dict[str, Any],
 ) -> BotState:
@@ -139,6 +141,7 @@ def _initial_state(
         "telegram_chat_id": telegram_chat_id,
         "input_text": input_text,
         "input_type": input_type,
+        "input_message_id": input_message_id,
         "preferred_language": preferred_language,
         "telegram_profile": telegram_profile,
         "user_profile": None,

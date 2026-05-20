@@ -117,6 +117,9 @@ def build_nodes(
             language=language,
             knowledge=knowledge,
             session=session,
+            user=user,
+            conversation=conversation,
+            input_message_id=state["input_message_id"],
         )
         escalation_payload: dict[str, Any] = {}
         if not answer.answered:
