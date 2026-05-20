@@ -4,7 +4,13 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Conversation, User
-from app.db.repositories import AppointmentRepository
+from app.db.repositories import (
+    AppointmentRepository,
+    ConversationRepository,
+    ExecutionRunRepository,
+    MessageRepository,
+    UserRepository,
+)
 from app.telegram.keyboards import language_keyboard
 from app.telegram.persistence import save_outgoing_message
 from app.telegram.texts import normalize_language, text
@@ -58,6 +64,33 @@ async def language_handler(
     )
 
 
+@router.message(Command("restart"))
+async def restart_handler(
+    message: Message,
+    db_session: AsyncSession,
+    db_user: User,
+    db_conversation: Conversation,
+    trace_id: str,
+) -> None:
+    await reset_user_dialog_history(
+        session=db_session,
+        user=db_user,
+        conversation=db_conversation,
+    )
+    response_text = text("choose_language")
+    sent = await message.answer(response_text, reply_markup=language_keyboard())
+    await save_outgoing_message(
+        session=db_session,
+        user=db_user,
+        conversation=db_conversation,
+        telegram_message_id=sent.message_id,
+        text=response_text,
+        language=None,
+        trace_id=trace_id,
+        raw_payload={"reply_markup": "language_keyboard", "restart": True},
+    )
+
+
 @router.message(Command("help"))
 async def help_handler(
     message: Message,
@@ -78,6 +111,28 @@ async def help_handler(
         language=language,
         trace_id=trace_id,
     )
+
+
+async def reset_user_dialog_history(
+    *,
+    session: AsyncSession,
+    user: User,
+    conversation: Conversation,
+) -> None:
+    await ExecutionRunRepository(session).delete_for_conversation(
+        user_id=user.id,
+        conversation_id=conversation.id,
+    )
+    await MessageRepository(session).delete_for_conversation(
+        user_id=user.id,
+        conversation_id=conversation.id,
+    )
+    await UserRepository(session).clear_language(user.telegram_user_id)
+    await ConversationRepository(session).reset_state(conversation_id=conversation.id)
+    user.preferred_language = None
+    conversation.current_flow = None
+    conversation.current_state = None
+    conversation.summary = None
 
 
 @router.message(Command("my_appointments"))

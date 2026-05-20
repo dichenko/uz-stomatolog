@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -63,6 +63,15 @@ class UserRepository:
             user = User(telegram_user_id=telegram_user_id)
             self.session.add(user)
         user.preferred_language = language
+        await self.session.flush()
+        return user
+
+    async def clear_language(self, telegram_user_id: int) -> User:
+        user = await self.get_by_telegram_id(telegram_user_id)
+        if user is None:
+            user = User(telegram_user_id=telegram_user_id)
+            self.session.add(user)
+        user.preferred_language = None
         await self.session.flush()
         return user
 
@@ -144,6 +153,17 @@ class ConversationRepository:
         await self.session.flush()
         return conversation
 
+    async def reset_state(self, *, conversation_id: int) -> Conversation:
+        conversation = await self.session.get(Conversation, conversation_id)
+        if conversation is None:
+            raise ValueError(f"Conversation {conversation_id} not found")
+        conversation.current_flow = None
+        conversation.current_state = None
+        conversation.summary = None
+        conversation.last_message_at = datetime.now(UTC)
+        await self.session.flush()
+        return conversation
+
 
 class MessageRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -203,6 +223,21 @@ class MessageRepository:
 
         result = await self.session.execute(stmt)
         return list(reversed(result.scalars().all()))
+
+    async def delete_for_conversation(
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+    ) -> int:
+        result = await self.session.execute(
+            delete(Message).where(
+                Message.user_id == user_id,
+                Message.conversation_id == conversation_id,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
 
 
 class AppointmentRepository:
@@ -484,6 +519,21 @@ class ExecutionRunRepository:
         self.session.add(run)
         await self.session.flush()
         return run
+
+    async def delete_for_conversation(
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+    ) -> int:
+        result = await self.session.execute(
+            delete(ExecutionRun).where(
+                ExecutionRun.user_id == user_id,
+                ExecutionRun.conversation_id == conversation_id,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
 
     async def finish(
         self,
