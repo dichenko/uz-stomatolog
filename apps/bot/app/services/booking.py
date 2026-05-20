@@ -114,6 +114,7 @@ async def confirm_booking_slot(
     calendar_service: GoogleCalendarService | None = None,
     admin_bot: Any | None = None,
     settings: Settings | None = None,
+    now: datetime | None = None,
 ) -> BookingConfirmationResult:
     draft = _load_booking_draft(conversation)
     slots = draft.get("proposed_slots") or []
@@ -186,7 +187,7 @@ async def confirm_booking_slot(
         appointment.calendar_event_id = calendar_event_id
         appointment.calendar_etag = event.get("etag")
 
-    await _schedule_booking_reminders(session, appointment)
+    await _schedule_booking_reminders(session, appointment, now=now)
     notification = await send_admin_notification(
         bot=admin_bot,
         message_text=_booking_admin_notification(
@@ -346,18 +347,19 @@ def _resolve_calendar_service(
 async def _schedule_booking_reminders(
     session: AsyncSession,
     appointment: Appointment,
+    now: datetime | None = None,
 ) -> None:
     reminders = ReminderRepository(session)
     day_before = appointment.start_at - timedelta(hours=24)
     two_hours_before = appointment.start_at - timedelta(hours=2)
-    now = datetime.now(UTC)
-    if day_before > now:
+    resolved_now = now if now is not None else datetime.now(UTC)
+    if day_before > resolved_now:
         await reminders.create(
             appointment_id=appointment.id,
             reminder_type="day_before",
             send_at=day_before,
         )
-    if two_hours_before > now:
+    if two_hours_before > resolved_now:
         await reminders.create(
             appointment_id=appointment.id,
             reminder_type="two_hours_before",

@@ -21,15 +21,11 @@ TELEGRAM_ISSUER = "https://oauth.telegram.org"
 def generate_pkce_pair() -> tuple[str, str]:
     code_verifier = secrets.token_urlsafe(64)[:96]
     digest = hashlib.sha256(code_verifier.encode()).digest()
-    code_challenge = (
-        base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
-    )
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
     return code_verifier, code_challenge
 
 
-def build_authorization_url(
-    settings: Settings, state: str, code_challenge: str
-) -> str:
+def build_authorization_url(settings: Settings, state: str, code_challenge: str) -> str:
     params = {
         "client_id": settings.telegram_oidc_client_id,
         "redirect_uri": settings.telegram_oidc_redirect_uri,
@@ -62,9 +58,7 @@ async def exchange_code_for_tokens(
         return response.json()
 
 
-async def verify_id_token(
-    settings: Settings, id_token: str
-) -> dict[str, Any]:
+async def verify_id_token(settings: Settings, id_token: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=15) as client:
         jwks_response = await client.get(TELEGRAM_OIDC_JWKS)
         jwks_response.raise_for_status()
@@ -99,9 +93,7 @@ def is_admin(tg_id: str, settings: Settings | None = None) -> bool:
     if not resolved.telegram_admin_ids:
         return False
     allowed = {
-        aid.strip()
-        for aid in resolved.telegram_admin_ids.split(",")
-        if aid.strip()
+        aid.strip() for aid in resolved.telegram_admin_ids.split(",") if aid.strip()
     }
     return tg_id in allowed
 

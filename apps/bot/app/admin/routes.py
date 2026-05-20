@@ -30,6 +30,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # ── Auth routes ────────────────────────────────────────────────────
 
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page():
     return _render_login_page()
@@ -86,7 +87,10 @@ async def auth_telegram_callback(request: Request):
         tg_id = get_tg_id_from_payload(payload)
         logger.info(
             "admin_login_check",
-            extra={"tg_id": tg_id, "admin_ids": settings.telegram_admin_ids or "(empty)"},
+            extra={
+                "tg_id": tg_id,
+                "admin_ids": settings.telegram_admin_ids or "(empty)",
+            },
         )
 
         async with _get_db_session() as session:
@@ -126,10 +130,15 @@ async def auth_telegram_callback(request: Request):
         return RedirectResponse("/admin/", status_code=HTTP_302_FOUND)
     except AuthError as exc:
         logger.warning("admin_auth_error", extra={"error": str(exc)})
-        return HTMLResponse(f"<h1>Authentication failed</h1><p>{exc}</p>", status_code=403)
+        return HTMLResponse(
+            f"<h1>Authentication failed</h1><p>{exc}</p>", status_code=403
+        )
     except Exception:
         logger.exception("admin_callback_unexpected_error")
-        return HTMLResponse("<h1>Internal server error</h1><p>Please try again later.</p>", status_code=500)
+        return HTMLResponse(
+            "<h1>Internal server error</h1><p>Please try again later.</p>",
+            status_code=500,
+        )
 
 
 @router.post("/auth/logout")
@@ -150,6 +159,7 @@ async def auth_logout(request: Request):
 
 # ── Protected helper ────────────────────────────────────────────────
 
+
 async def _require_admin(request: Request) -> str:
     settings = get_settings()
     tg_id = request.session.get(SESSION_KEY_TG_ID)
@@ -162,6 +172,7 @@ async def _require_admin(request: Request) -> str:
 
 
 # ── API routes ──────────────────────────────────────────────────────
+
 
 @router.get("/api/me")
 async def api_me(request: Request):
@@ -191,8 +202,12 @@ async def api_save_system_prompt(request: Request):
         old = await get_setting(session, "llm.system_prompt")
         await set_setting(session, "llm.system_prompt", {"text": text}, tg_id)
         await log_audit(
-            session, admin_tg_id=tg_id, action="update_setting",
-            setting_key="llm.system_prompt", old_value=old, new_value={"text": text},
+            session,
+            admin_tg_id=tg_id,
+            action="update_setting",
+            setting_key="llm.system_prompt",
+            old_value=old,
+            new_value={"text": text},
             ip_address=request.client.host if request.client else None,
         )
         await session.commit()
@@ -212,8 +227,12 @@ async def api_save_welcome_messages(request: Request):
         old = await get_setting(session, "bot.welcome_messages")
         await set_setting(session, "bot.welcome_messages", value, tg_id)
         await log_audit(
-            session, admin_tg_id=tg_id, action="update_setting",
-            setting_key="bot.welcome_messages", old_value=old, new_value=value,
+            session,
+            admin_tg_id=tg_id,
+            action="update_setting",
+            setting_key="bot.welcome_messages",
+            old_value=old,
+            new_value=value,
             ip_address=request.client.host if request.client else None,
         )
         await session.commit()
@@ -233,8 +252,12 @@ async def api_save_tts_prompts(request: Request):
         old = await get_setting(session, "tts.prompts")
         await set_setting(session, "tts.prompts", value, tg_id)
         await log_audit(
-            session, admin_tg_id=tg_id, action="update_setting",
-            setting_key="tts.prompts", old_value=old, new_value=value,
+            session,
+            admin_tg_id=tg_id,
+            action="update_setting",
+            setting_key="tts.prompts",
+            old_value=old,
+            new_value=value,
             ip_address=request.client.host if request.client else None,
         )
         await session.commit()
@@ -250,8 +273,12 @@ async def api_save_clinic_info(request: Request):
         old = await get_setting(session, "clinic.info")
         await set_setting(session, "clinic.info", {"text": text}, tg_id)
         await log_audit(
-            session, admin_tg_id=tg_id, action="update_setting",
-            setting_key="clinic.info", old_value=old, new_value={"text": text},
+            session,
+            admin_tg_id=tg_id,
+            action="update_setting",
+            setting_key="clinic.info",
+            old_value=old,
+            new_value={"text": text},
             ip_address=request.client.host if request.client else None,
         )
         await session.commit()
@@ -259,6 +286,7 @@ async def api_save_clinic_info(request: Request):
 
 
 # ── Page routes ─────────────────────────────────────────────────────
+
 
 @router.get("/", response_class=HTMLResponse)
 async def admin_index():
@@ -271,7 +299,9 @@ async def system_prompt_page(request: Request):
     async with _get_db_session() as session:
         data = await get_setting(session, "llm.system_prompt")
     current = str(data.get("text", ""))
-    return _render_page("Системный промпт", "system-prompt", current, "text", single_field=True)
+    return _render_page(
+        "Системный промпт", "system-prompt", current, "text", single_field=True
+    )
 
 
 @router.get("/welcome-messages", response_class=HTMLResponse)
@@ -280,8 +310,11 @@ async def welcome_messages_page(request: Request):
     async with _get_db_session() as session:
         data = await get_setting(session, "bot.welcome_messages")
     return _render_page(
-        "Первое сообщение", "welcome-messages",
-        data, "welcome", single_field=False,
+        "Первое сообщение",
+        "welcome-messages",
+        data,
+        "welcome",
+        single_field=False,
     )
 
 
@@ -291,8 +324,11 @@ async def tts_prompts_page(request: Request):
     async with _get_db_session() as session:
         data = await get_setting(session, "tts.prompts")
     return _render_page(
-        "Промпты TTS", "tts-prompts",
-        data, "tts", single_field=False,
+        "Промпты TTS",
+        "tts-prompts",
+        data,
+        "tts",
+        single_field=False,
     )
 
 
@@ -302,10 +338,13 @@ async def clinic_info_page(request: Request):
     async with _get_db_session() as session:
         data = await get_setting(session, "clinic.info")
     current = str(data.get("text", ""))
-    return _render_page("Справка о клинике", "clinic-info", current, "text", single_field=True)
+    return _render_page(
+        "Справка о клинике", "clinic-info", current, "text", single_field=True
+    )
 
 
 # ── HTML rendering helpers ──────────────────────────────────────────
+
 
 def _render_login_page() -> str:
     return _base_html(
@@ -345,7 +384,9 @@ def _render_page(
             val = str(data.get(lang, "")) if isinstance(data, dict) else ""
             escaped = _js_escape(val)
             fields_html += f'<div class="field-group">{_textarea_content(f"lang-{lang}", label, escaped, "ta-multi")}</div>'
-            init_js += f'document.getElementById("field-lang-{lang}").value = "{escaped}";'
+            init_js += (
+                f'document.getElementById("field-lang-{lang}").value = "{escaped}";'
+            )
         card_class = "card"
         form_class = ""
         content_class = "content"
@@ -670,9 +711,11 @@ def _js_escape(text: str) -> str:
 
 def _random_hex(length: int) -> str:
     import secrets
+
     return secrets.token_hex(length)
 
 
 def _get_db_session() -> AsyncSession:
     from app.db.session import async_session_factory
+
     return async_session_factory()

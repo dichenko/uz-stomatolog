@@ -262,21 +262,27 @@ async def _try_openai_answer(
     if system_prompt.strip():
         messages.append({"role": "system", "content": system_prompt.strip()})
 
-    messages.append({
-        "role": "system",
-        "content": _build_language_instruction(language),
-    })
+    messages.append(
+        {
+            "role": "system",
+            "content": _build_language_instruction(language),
+        }
+    )
 
     if clinic_info.strip() and clinic_info.strip() != knowledge.strip():
-        messages.append({
-            "role": "system",
-            "content": f"Справочная информация о клинике:\n\n{clinic_info.strip()}",
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": f"Справочная информация о клинике:\n\n{clinic_info.strip()}",
+            }
+        )
 
-    messages.append({
-        "role": "user",
-        "content": f"Knowledge base:\n{knowledge}\n\nQuestion:\n{question}",
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": f"Knowledge base:\n{knowledge}\n\nQuestion:\n{question}",
+        }
+    )
 
     try:
         client = wrap_openai(AsyncOpenAI(api_key=api_key))
