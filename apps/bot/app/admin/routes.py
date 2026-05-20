@@ -455,6 +455,6 @@ def _random_hex(length: int) -> str:
     return secrets.token_hex(length)
 
 
-async def _get_db_session() -> AsyncSession:
+def _get_db_session() -> AsyncSession:
     from app.db.session import async_session_factory
     return async_session_factory()
