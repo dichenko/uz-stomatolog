@@ -82,36 +82,39 @@ async def auth_telegram_callback(request: Request):
                 ip_address=request.client.host if request.client else None,
             )
             await session.commit()
-    except AuthError as exc:
-        logger.warning("admin_auth_error", extra={"error": str(exc)})
-        return HTMLResponse(f"<h1>Authentication failed</h1><p>{exc}</p>", status_code=403)
 
-    if not is_admin(tg_id, settings):
+        if not is_admin(tg_id, settings):
+            async with _get_db_session() as session:
+                await log_audit(
+                    session,
+                    admin_tg_id=tg_id,
+                    action="login_forbidden",
+                    ip_address=request.client.host if request.client else None,
+                )
+                await session.commit()
+            return HTMLResponse("<h1>Access denied</h1>", status_code=403)
+
+        request.session[SESSION_KEY_TG_ID] = tg_id
+        request.session[SESSION_KEY_USERNAME] = str(payload.get("username") or "")
+        request.session[SESSION_KEY_NAME] = str(payload.get("first_name") or "")
+        request.session[SESSION_KEY_PICTURE] = str(payload.get("photo_url") or "")
+
         async with _get_db_session() as session:
             await log_audit(
                 session,
                 admin_tg_id=tg_id,
-                action="login_forbidden",
+                action="login_success",
                 ip_address=request.client.host if request.client else None,
             )
             await session.commit()
-        return HTMLResponse("<h1>Access denied</h1>", status_code=403)
 
-    request.session[SESSION_KEY_TG_ID] = tg_id
-    request.session[SESSION_KEY_USERNAME] = str(payload.get("username") or "")
-    request.session[SESSION_KEY_NAME] = str(payload.get("first_name") or "")
-    request.session[SESSION_KEY_PICTURE] = str(payload.get("photo_url") or "")
-
-    async with _get_db_session() as session:
-        await log_audit(
-            session,
-            admin_tg_id=tg_id,
-            action="login_success",
-            ip_address=request.client.host if request.client else None,
-        )
-        await session.commit()
-
-    return RedirectResponse("/admin/", status_code=HTTP_302_FOUND)
+        return RedirectResponse("/admin/", status_code=HTTP_302_FOUND)
+    except AuthError as exc:
+        logger.warning("admin_auth_error", extra={"error": str(exc)})
+        return HTMLResponse(f"<h1>Authentication failed</h1><p>{exc}</p>", status_code=403)
+    except Exception:
+        logger.exception("admin_callback_unexpected_error")
+        return HTMLResponse("<h1>Internal server error</h1><p>Please try again later.</p>", status_code=500)
 
 
 @router.post("/auth/logout")

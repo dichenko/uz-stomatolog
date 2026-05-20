@@ -96,10 +96,9 @@ def get_tg_id_from_payload(payload: dict[str, Any]) -> str:
 
 def is_admin(tg_id: str, settings: Settings | None = None) -> bool:
     resolved = settings or get_settings()
-    admin_ids = (
-        resolved.telegram_admin_ids.split(",") if resolved.telegram_admin_ids else ""
-    )
-    return tg_id in {aid.strip() for aid in admin_ids.split(",") if aid.strip()}
+    if not resolved.telegram_admin_ids:
+        return False
+    return tg_id in {aid.strip() for aid in resolved.telegram_admin_ids.split(",") if aid.strip()}
 
 
 SESSION_KEY_TG_ID = "tg_id"
