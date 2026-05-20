@@ -87,6 +87,7 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
         language="en",
         calendar_service=calendar,
         admin_bot=FakeAdminBot(),
+        now=now,
     )
 
     appointments = (await session.execute(select(Appointment))).scalars().all()
@@ -192,6 +193,7 @@ async def test_booking_rejects_conflicting_slot(session, monkeypatch):
             language="en",
             calendar_service=ConflictingCalendarService(),
             admin_bot=FakeAdminBot(),
+            now=now,
         )
         raise AssertionError("Expected BookingSlotConflictError")
     except BookingSlotConflictError:
