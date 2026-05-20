@@ -332,20 +332,24 @@ def _render_page(
     if single_field:
         text = str(data) if isinstance(data, str) else str(data.get("text", ""))
         escaped = _js_escape(text)
-        fields_html = _textarea("text", "Текст", escaped)
+        fields_html = f'<div class="field field-large">{_textarea_content("text", "Текст", escaped, "ta-large")}</div>'
         init_js = f'document.getElementById("field-text").value = "{escaped}";'
+        page_class = "page page-large"
+        form_class = "form-large"
     else:
         labels = {"ru": "Русский", "uz": "Узбекский", "en": "Английский"}
         for lang, label in labels.items():
             val = str(data.get(lang, "")) if isinstance(data, dict) else ""
             escaped = _js_escape(val)
-            fields_html += _textarea(f"lang-{lang}", label, escaped)
+            fields_html += f'<div class="field">{_textarea_content(f"lang-{lang}", label, escaped, "ta-multi")}</div>'
             init_js += f'document.getElementById("field-lang-{lang}").value = "{escaped}";'
+        page_class = "page"
+        form_class = ""
 
     body = f"""
-    <div class="page">
+    <div class="{page_class}">
         <h2>{title}</h2>
-        <form id="settings-form" onsubmit="return saveSettings(event)">
+        <form id="settings-form" onsubmit="return saveSettings(event)" class="{form_class}">
             {fields_html}
             <button type="submit" class="save-btn">Сохранить</button>
             <div id="msg" class="msg"></div>
@@ -389,21 +393,20 @@ def _render_page(
     }}
     </script>
     """
-    return _base_html(title=title, body=body, is_page=True)
+    return _base_html(title=title, body=body, is_page=True, large=single_field)
 
 
-def _textarea(id: str, label: str, value: str) -> str:
+def _textarea_content(id: str, label: str, value: str, css_class: str = "ta") -> str:
     return f"""
-    <div class="field">
         <label for="field-{id}">{label}</label>
-        <textarea id="field-{id}" class="ta">{value}</textarea>
-    </div>"""
+        <textarea id="field-{id}" class="{css_class}">{value}</textarea>"""
 
 
 def _base_html(
     title: str = "",
     body: str = "",
     is_page: bool = False,
+    large: bool = False,
 ) -> str:
     nav = ""
     if is_page:
@@ -427,6 +430,7 @@ def _base_html(
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; min-height: 100vh; }}
+  body.large {{ display: flex; flex-direction: column; }}
   nav {{ display: flex; gap: 16px; flex-wrap: wrap; background: #1a1a2e; padding: 12px 24px; }}
   nav a {{ color: #e0e0e0; text-decoration: none; font-size: 14px; }}
   nav a:hover {{ color: #fff; }}
@@ -436,10 +440,15 @@ def _base_html(
   .tg-btn {{ display: inline-block; background: #2AABEE; color: #fff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: 600; }}
   .tg-btn:hover {{ background: #229ED9; }}
   .page {{ max-width: 800px; margin: 24px auto; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }}
+  .page-large {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 24px; }}
   .page h2 {{ margin-bottom: 20px; }}
+  .form-large {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}
   .field {{ margin-bottom: 16px; }}
+  .field-large {{ display: flex; flex-direction: column; flex: 1; min-height: 0; }}
   .field label {{ display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }}
   .ta {{ width: 100%; min-height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; resize: vertical; font-family: inherit; }}
+  .ta-large {{ flex: 1; min-height: 0; resize: vertical; overflow-y: auto; width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; font-family: inherit; }}
+  .ta-multi {{ min-height: 240px; width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; resize: vertical; font-family: inherit; }}
   .save-btn {{ background: #27ae60; color: #fff; border: none; padding: 10px 28px; border-radius: 6px; font-size: 15px; cursor: pointer; }}
   .save-btn:hover {{ background: #219a52; }}
   .msg {{ margin-top: 12px; padding: 8px 12px; border-radius: 4px; font-size: 14px; }}
@@ -447,7 +456,7 @@ def _base_html(
   .msg.error {{ background: #f8d7da; color: #721c24; }}
 </style>
 </head>
-<body>
+<body{' class="large"' if large else ""}>
 {nav}
 {body}
 </body>
