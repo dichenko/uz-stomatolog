@@ -4,11 +4,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.status import HTTP_302_FOUND
 
 from app.admin import admin_router
+from app.admin.auth import SESSION_KEY_TG_ID, is_admin
 from app.config import get_settings
 from app.db.session import async_session_factory
 from app.logging import configure_logging
@@ -94,6 +97,14 @@ register_telegram_webhook_route(app)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "OK"}
+
+
+@app.get("/")
+async def root(request: Request):
+    tg_id = request.session.get(SESSION_KEY_TG_ID)
+    if tg_id and is_admin(str(tg_id)):
+        return RedirectResponse("/admin/", status_code=HTTP_302_FOUND)
+    return RedirectResponse("/admin/login", status_code=HTTP_302_FOUND)
 
 
 if __name__ == "__main__":
