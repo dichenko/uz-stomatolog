@@ -7,6 +7,7 @@ from app.speech.base import (
 )
 from app.speech.factory import SpeechProviders, create_speech_providers
 from app.speech.mock_provider import MockSpeechProvider
+from app.speech.yandex_provider import YandexSpeechKitProvider
 
 __all__ = [
     "SpeechProviderError",
@@ -16,5 +17,6 @@ __all__ = [
     "TextToSpeechProvider",
     "TextToSpeechResult",
     "MockSpeechProvider",
+    "YandexSpeechKitProvider",
     "create_speech_providers",
 ]
