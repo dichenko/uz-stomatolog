@@ -170,6 +170,16 @@ async def generate_admin_faq_answer(
     session: AsyncSession | None = None,
 ) -> FaqAnswer:
     normalized_language = normalize_language(language)
+
+    if session is not None:
+        try:
+            clinic_info = await get_clinic_info(session)
+        except Exception:
+            logger.exception("admin_get_clinic_info_failed")
+            clinic_info = ""
+        if clinic_info.strip():
+            knowledge = clinic_info.strip()
+
     if _is_medical_advice_request(question):
         return FaqAnswer(
             text=MEDICAL_REFUSALS[normalized_language],
@@ -257,7 +267,7 @@ async def _try_openai_answer(
         "content": _build_language_instruction(language),
     })
 
-    if clinic_info.strip():
+    if clinic_info.strip() and clinic_info.strip() != knowledge.strip():
         messages.append({
             "role": "system",
             "content": f"Справочная информация о клинике:\n\n{clinic_info.strip()}",
