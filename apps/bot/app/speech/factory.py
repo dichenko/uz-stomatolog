@@ -18,12 +18,15 @@ class SpeechProviders:
         normalized_language = normalize_language(language)
         if normalized_language == "uz":
             return self.muxlisa
-        if normalized_language == "ru":
-            return self.yandex
         return self.openai
 
     def tts_for_language(self, language: str) -> TextToSpeechProvider:
-        return self.muxlisa if normalize_language(language) == "uz" else self.openai
+        normalized_language = normalize_language(language)
+        if normalized_language == "uz":
+            return self.muxlisa
+        if normalized_language == "ru":
+            return self.yandex
+        return self.openai
 
 
 def create_speech_providers(settings: Settings | None = None) -> SpeechProviders:

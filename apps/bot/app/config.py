@@ -83,13 +83,15 @@ class Settings(BaseSettings):
     muxlisa_tts_speaker: int = 1
 
     yandex_speechkit_api_key: SecretStr | None = None
-    yandex_stt_base_url: str = "https://stt.api.cloud.yandex.net"
-    yandex_stt_model: str = "yandex-speechkit-stt-v1"
-    yandex_stt_language: str = "ru-RU"
-    yandex_stt_format: str = "oggopus"
-    yandex_stt_topic: str = "general"
-    yandex_stt_timeout_ms: int = 60000
-    yandex_stt_max_audio_size_mb: int = 1
+    yandex_tts_base_url: str = "https://tts.api.cloud.yandex.net"
+    yandex_tts_model: str = "yandex-speechkit-tts-v1"
+    yandex_tts_language: str = "ru-RU"
+    yandex_tts_voice: str = "marina"
+    yandex_tts_emotion: str = "friendly"
+    yandex_tts_speed: str = "0.95"
+    yandex_tts_format: str = "oggopus"
+    yandex_tts_timeout_ms: int = 60000
+    yandex_tts_max_chars: int = 5000
 
     google_calendar_id: str | None = None
     google_service_account_json_path: str = "/run/secrets/google_service_account.json"
