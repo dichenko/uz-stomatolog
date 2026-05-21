@@ -290,12 +290,12 @@ class AppointmentRepository:
         user_id: int,
         now: datetime | None = None,
     ) -> list[Appointment]:
+        resolved_now = _as_utc(now or datetime.now(UTC))
         stmt: Select[tuple[Appointment]] = select(Appointment).where(
             Appointment.user_id == user_id,
             Appointment.status == "scheduled",
+            Appointment.start_at >= resolved_now,
         )
-        if now is not None:
-            stmt = stmt.where(Appointment.start_at >= now)
         result = await self.session.execute(stmt.order_by(Appointment.start_at))
         return list(result.scalars())
 

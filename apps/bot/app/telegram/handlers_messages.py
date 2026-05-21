@@ -251,10 +251,7 @@ async def voice_handler(
             input_type="voice",
             language=language,
         )
-        response_text = (
-            f"{graph_result.final_response_text}\n\n"
-            f"{text('voice_ai_disclosure', language)}"
-        )
+        response_text = graph_result.final_response_text
         reply_markup = _reply_markup_for_graph_result(graph_result, language)
         sent = await message.answer(response_text, reply_markup=reply_markup)
         await save_outgoing_message(

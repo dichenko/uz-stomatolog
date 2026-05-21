@@ -141,9 +141,9 @@ async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
             "data": {
                 "text": "Hello test",
                 "lang": "ru-RU",
-                "voice": "alena",
-                "emotion": "good",
-                "speed": "1.15",
+                "voice": "marina",
+                "emotion": "friendly",
+                "speed": "1.4",
                 "format": "oggopus",
             },
             "timeout": 12,

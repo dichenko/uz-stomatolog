@@ -49,6 +49,15 @@ async def test_cancellation_message_returns_active_appointments(session):
     future_end = future_start + timedelta(minutes=60)
     await AppointmentRepository(session).create(
         user_id=user.id,
+        service_type="past_cleaning",
+        doctor_type="therapist",
+        start_at=datetime(2020, 1, 1, 9, 0, tzinfo=TZ),
+        end_at=datetime(2020, 1, 1, 10, 0, tzinfo=TZ),
+        patient_name="Past Patient",
+        primary_phone="+998901234567",
+    )
+    await AppointmentRepository(session).create(
+        user_id=user.id,
         service_type="cleaning",
         doctor_type="therapist",
         start_at=future_start,
@@ -65,6 +74,7 @@ async def test_cancellation_message_returns_active_appointments(session):
 
     assert len(result.active_appointments) == 1
     assert result.active_appointments[0]["service_type"] == "cleaning"
+    assert "past_cleaning" not in result.text
     assert "Appointment:" in result.text
 
 
