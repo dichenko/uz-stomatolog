@@ -75,6 +75,33 @@ class UserRepository:
         await self.session.flush()
         return user
 
+    async def remember_patient_contact(
+        self,
+        *,
+        user_id: int,
+        patient_name: str | None = None,
+        phone: str | None = None,
+        source: str | None = None,
+    ) -> User:
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one()
+
+        cleaned_name = patient_name.strip() if patient_name else None
+        cleaned_phone = phone.strip() if phone else None
+        if cleaned_name:
+            user.patient_name = cleaned_name
+        if cleaned_phone:
+            user.primary_phone = cleaned_phone
+            await self.add_phone(
+                user_id=user_id,
+                phone=cleaned_phone,
+                is_primary=True,
+                source=source,
+            )
+
+        await self.session.flush()
+        return user
+
     async def add_phone(
         self,
         *,

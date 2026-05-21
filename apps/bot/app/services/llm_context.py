@@ -22,6 +22,7 @@ class ChatContextMessage:
 
 @dataclass(frozen=True)
 class LlmContext:
+    user_profile: str
     clinic_info: str
     recent_messages: list[ChatContextMessage]
     appointment_history: str
@@ -45,6 +46,7 @@ async def build_llm_context(
     )
     clinic_info = await get_clinic_info(session)
     return LlmContext(
+        user_profile=_format_user_profile(user),
         clinic_info=clinic_info.strip(),
         recent_messages=[
             _message_to_context_message(message) for message in recent_messages
@@ -61,6 +63,11 @@ def build_openai_context_messages(
 
     messages: list[dict[str, str]] = []
     system_sections: list[str] = []
+    if context.user_profile:
+        system_sections.append(
+            "Known user profile from database:\n"
+            f"{context.user_profile}"
+        )
     if context.clinic_info:
         system_sections.append(
             "Clinic reference from admin settings:\n"
@@ -100,6 +107,19 @@ def build_openai_context_messages(
             for message in context.recent_messages
         )
     return messages
+
+
+def _format_user_profile(user: User) -> str:
+    lines: list[str] = []
+    if user.patient_name:
+        lines.append(f"patient_name={user.patient_name}")
+    if user.primary_phone:
+        lines.append(f"primary_phone={user.primary_phone}")
+    if user.telegram_user_id:
+        lines.append(f"telegram_user_id={user.telegram_user_id}")
+    if user.telegram_username:
+        lines.append(f"telegram_username={user.telegram_username}")
+    return "\n".join(lines)
 
 
 def _message_to_context_message(message: Message) -> ChatContextMessage:

@@ -48,6 +48,8 @@ def build_nodes(
                 "telegram_first_name": user.telegram_first_name,
                 "telegram_last_name": user.telegram_last_name,
                 "preferred_language": user.preferred_language,
+                "patient_name": user.patient_name,
+                "primary_phone": user.primary_phone,
             },
             "conversation_summary": conversation.summary,
             "tool_calls": [

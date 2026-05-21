@@ -58,6 +58,8 @@ class User(Base, TimestampMixin):
     telegram_first_name: Mapped[str | None] = mapped_column(String(255))
     telegram_last_name: Mapped[str | None] = mapped_column(String(255))
     preferred_language: Mapped[str | None] = mapped_column(String(2), index=True)
+    patient_name: Mapped[str | None] = mapped_column(String(255))
+    primary_phone: Mapped[str | None] = mapped_column(String(64))
 
     phones: Mapped[list["UserPhone"]] = relationship(
         back_populates="user",

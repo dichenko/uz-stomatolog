@@ -28,7 +28,14 @@ async def test_faq_builds_llm_context_from_db(session, monkeypatch):
     )
     user = await UserRepository(session).upsert_from_telegram(
         telegram_user_id=7001,
+        telegram_username="ali",
         preferred_language="en",
+    )
+    await UserRepository(session).remember_patient_contact(
+        user_id=user.id,
+        patient_name="Ali Karimov",
+        phone="+998901234567",
+        source="test",
     )
     conversation = await ConversationRepository(session).get_or_create(
         user_id=user.id,
@@ -92,6 +99,8 @@ async def test_faq_builds_llm_context_from_db(session, monkeypatch):
 
     context = captured["llm_context"]
     assert captured["knowledge"] == "Admin clinic info: open 09:00-21:00"
+    assert "patient_name=Ali Karimov" in context.user_profile
+    assert "primary_phone=+998901234567" in context.user_profile
     assert context.clinic_info == "Admin clinic info: open 09:00-21:00"
     assert [message.role for message in context.recent_messages] == [
         "user",
@@ -105,6 +114,13 @@ async def test_faq_builds_llm_context_from_db(session, monkeypatch):
     openai_messages = build_openai_context_messages(context)
     assert any(
         "Clinic reference from admin settings" in message["content"]
+        for message in openai_messages
+        if message["role"] == "system"
+    )
+    assert any(
+        "Known user profile from database" in message["content"]
+        and "patient_name=Ali Karimov" in message["content"]
+        and "primary_phone=+998901234567" in message["content"]
         for message in openai_messages
         if message["role"] == "system"
     )

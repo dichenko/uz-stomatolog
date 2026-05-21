@@ -65,6 +65,7 @@ async def handle_booking_message(
     draft = _load_booking_draft(conversation)
     draft["service_type"] = draft.get("service_type") or service_type
     draft["doctor_type"] = draft.get("doctor_type") or doctor_type
+    _merge_known_patient_data(draft, user)
     _merge_patient_data(draft, input_text)
 
     missing_fields = _missing_booking_fields(draft)
@@ -82,6 +83,13 @@ async def handle_booking_message(
             service_type=draft["service_type"],
             doctor_type=draft["doctor_type"],
         )
+
+    await UserRepository(session).remember_patient_contact(
+        user_id=user.id,
+        patient_name=str(draft["patient_name"]),
+        phone=str(draft["phone"]),
+        source="booking",
+    )
 
     slots = await _propose_slots(
         calendar_service=calendar_service,
@@ -166,10 +174,10 @@ async def confirm_booking_slot(
         conversation_summary=conversation_summary,
         created_trace_id=str(draft.get("trace_id") or ""),
     )
-    await UserRepository(session).add_phone(
+    await UserRepository(session).remember_patient_contact(
         user_id=user.id,
+        patient_name=str(draft["patient_name"]),
         phone=str(draft["phone"]),
-        is_primary=True,
         source="booking",
     )
 
@@ -256,6 +264,13 @@ def _merge_patient_data(draft: dict[str, Any], input_text: str) -> None:
     patient_name = _extract_patient_name(input_text, phone)
     if patient_name:
         draft["patient_name"] = patient_name
+
+
+def _merge_known_patient_data(draft: dict[str, Any], user: User) -> None:
+    if not draft.get("patient_name") and user.patient_name:
+        draft["patient_name"] = user.patient_name
+    if not draft.get("phone") and user.primary_phone:
+        draft["phone"] = user.primary_phone
 
 
 def _extract_phone(input_text: str) -> str | None:

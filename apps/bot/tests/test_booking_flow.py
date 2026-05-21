@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from app.db.models import Appointment, ReminderJob, UserPhone
+from app.db.models import Appointment, ReminderJob, User, UserPhone
 from app.db.repositories import (
     ConversationRepository,
     MessageRepository,
@@ -118,6 +118,9 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
     appointments = (await session.execute(select(Appointment))).scalars().all()
     reminders = (await session.execute(select(ReminderJob))).scalars().all()
     phones = (await session.execute(select(UserPhone))).scalars().all()
+    db_user = (
+        await session.execute(select(User).where(User.id == user.id))
+    ).scalar_one()
 
     assert first.missing_fields == ["patient_name", "phone"]
     assert second.missing_fields == []
@@ -126,7 +129,10 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
     assert confirmation.admin_notification_sent is True
     assert appointments[0].service_type == "cleaning"
     assert appointments[0].patient_name == "Ali Karimov"
+    assert db_user.patient_name == "Ali Karimov"
+    assert db_user.primary_phone == "+998901234567"
     assert phones[0].phone == "+998901234567"
+    assert phones[0].is_primary is True
     assert {reminder.reminder_type for reminder in reminders} == {
         "day_before",
         "two_hours_before",
@@ -141,6 +147,39 @@ async def test_booking_flow_collects_data_proposes_slot_and_confirms(
     assert "How much is cleaning and can I book it?" in admin_bot.messages[0]["text"]
     assert "Final booking: service=cleaning" in admin_bot.messages[0]["text"]
     assert "[phone]" in admin_bot.messages[0]["text"]
+
+
+async def test_booking_flow_reuses_saved_patient_contact(session):
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=2004,
+        telegram_username="ali",
+        preferred_language="en",
+    )
+    await UserRepository(session).remember_patient_contact(
+        user_id=user.id,
+        patient_name="Ali Karimov",
+        phone="+998901234567",
+        source="test",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=2004,
+    )
+
+    result = await handle_booking_message(
+        session=session,
+        user=user,
+        conversation=conversation,
+        input_text="I want to book a cleaning",
+        language="en",
+        service_type="cleaning",
+        doctor_type="therapist",
+        calendar_service=FakeCalendarService(),
+        now=datetime(2026, 5, 24, 8, 0, tzinfo=TZ),
+    )
+
+    assert result.missing_fields == []
+    assert len(result.proposed_slots) == 3
 
 
 def test_booking_keyboards_render_expected_buttons():
