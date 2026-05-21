@@ -125,6 +125,9 @@ async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
         Settings(
             speech_temp_dir=str(test_dir),
             yandex_speechkit_api_key="test-key",
+            yandex_tts_voice="marina",
+            yandex_tts_emotion="friendly",
+            yandex_tts_speed="1.4",
             yandex_tts_timeout_ms=12000,
         )
     )
