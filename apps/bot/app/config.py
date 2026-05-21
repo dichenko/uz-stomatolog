@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     muxlisa_max_audio_size_mb: int = 5
     muxlisa_max_audio_duration_sec: int = 60
     muxlisa_tts_max_chars: int = 512
-    muxlisa_tts_speaker: int = 1
+    muxlisa_tts_speaker: int = 0
 
     yandex_speechkit_api_key: SecretStr | None = None
     yandex_tts_base_url: str = "https://tts.api.cloud.yandex.net"
