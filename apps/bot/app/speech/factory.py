@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from app.config import Settings, get_settings
+from app.speech.azure_provider import AzureSpeechProvider
 from app.speech.base import SpeechToTextProvider, TextToSpeechProvider
 from app.speech.muxlisa_provider import MuxlisaSpeechProvider
 from app.speech.openai_provider import OpenAISpeechProvider
@@ -12,6 +13,7 @@ from app.telegram.texts import normalize_language
 class SpeechProviders:
     openai: OpenAISpeechProvider
     muxlisa: MuxlisaSpeechProvider
+    azure: AzureSpeechProvider
     yandex: YandexSpeechKitProvider
 
     def stt_for_language(self, language: str) -> SpeechToTextProvider:
@@ -25,7 +27,7 @@ class SpeechProviders:
         if normalized_language == "uz":
             return self.muxlisa
         if normalized_language == "ru":
-            return self.yandex
+            return self.azure
         return self.openai
 
 
@@ -34,5 +36,6 @@ def create_speech_providers(settings: Settings | None = None) -> SpeechProviders
     return SpeechProviders(
         openai=OpenAISpeechProvider(resolved_settings),
         muxlisa=MuxlisaSpeechProvider(resolved_settings),
+        azure=AzureSpeechProvider(resolved_settings),
         yandex=YandexSpeechKitProvider(resolved_settings),
     )

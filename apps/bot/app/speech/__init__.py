@@ -1,3 +1,4 @@
+from app.speech.azure_provider import AzureSpeechProvider
 from app.speech.base import (
     SpeechProviderError,
     SpeechToTextProvider,
@@ -10,6 +11,7 @@ from app.speech.mock_provider import MockSpeechProvider
 from app.speech.yandex_provider import YandexSpeechKitProvider
 
 __all__ = [
+    "AzureSpeechProvider",
     "SpeechProviderError",
     "SpeechProviders",
     "SpeechToTextProvider",

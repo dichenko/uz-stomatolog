@@ -93,6 +93,18 @@ class Settings(BaseSettings):
     yandex_tts_timeout_ms: int = 60000
     yandex_tts_max_chars: int = 5000
 
+    azure_speech_key: SecretStr | None = None
+    azure_speech_region: str = "westeurope"
+    azure_speech_endpoint: str = (
+        "https://westeurope.tts.speech.microsoft.com/cognitiveservices/v1"
+    )
+    azure_tts_language: str = "ru-RU"
+    azure_tts_voice: str = "ru-RU-SvetlanaNeural"
+    azure_tts_output_format: str = "ogg-24khz-16bit-mono-opus"
+    azure_tts_rate: str = "20%"
+    azure_tts_timeout_ms: int = 60000
+    azure_tts_max_chars: int = 5000
+
     google_calendar_id: str | None = None
     google_service_account_json_path: str = "/run/secrets/google_service_account.json"
 

@@ -6,6 +6,7 @@ import pytest
 
 from app.config import Settings
 from app.speech import MockSpeechProvider, create_speech_providers
+from app.speech.azure_provider import AzureSpeechProvider, AzureSpeechStatusError
 from app.speech.base import SpeechProviderError
 from app.speech.openai_provider import OpenAISpeechProvider
 from app.speech.temp_files import (
@@ -25,7 +26,7 @@ def test_speech_factory_routes_languages_to_expected_providers():
     assert providers.stt_for_language("uz") is providers.muxlisa
     assert providers.tts_for_language("uz") is providers.muxlisa
     assert providers.stt_for_language("ru") is providers.openai
-    assert providers.tts_for_language("ru") is providers.yandex
+    assert providers.tts_for_language("ru") is providers.azure
     assert providers.stt_for_language("en") is providers.openai
     assert providers.tts_for_language("en") is providers.openai
 
@@ -84,6 +85,129 @@ async def test_openai_tts_rejects_too_long_text_before_api_call():
 
     with pytest.raises(SpeechProviderError):
         await provider.synthesize("too long", "en")
+
+
+async def test_azure_tts_posts_ssml_to_speech_service(monkeypatch):
+    test_dir = _make_test_dir()
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "audio/ogg"}
+        content = b"ogg-opus-bytes"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, *, headers, content):
+            calls.append(
+                {
+                    "url": url,
+                    "headers": headers,
+                    "content": content,
+                    "timeout": self.timeout,
+                }
+            )
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "app.speech.azure_provider.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+
+    providers = create_speech_providers(
+        Settings(
+            speech_temp_dir=str(test_dir),
+            azure_speech_key="test-key",
+            azure_speech_endpoint=(
+                "https://westeurope.tts.speech.microsoft.com/cognitiveservices/v1"
+            ),
+            azure_tts_voice="ru-RU-SvetlanaNeural",
+            azure_tts_output_format="ogg-24khz-16bit-mono-opus",
+            azure_tts_rate="20%",
+            azure_tts_timeout_ms=12000,
+        )
+    )
+    result = await providers.azure.synthesize("**Привет** - тест", "ru")
+
+    assert Path(result.file_path).read_bytes() == b"ogg-opus-bytes"
+    assert result.provider == "azure"
+    assert result.mime_type == "audio/ogg"
+    assert result.format == "opus"
+    assert calls == [
+        {
+            "url": "https://westeurope.tts.speech.microsoft.com/cognitiveservices/v1",
+            "headers": {
+                "Ocp-Apim-Subscription-Key": "test-key",
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": "ogg-24khz-16bit-mono-opus",
+                "User-Agent": "uz-stomatolog-bot",
+            },
+            "content": (
+                '<speak version="1.0" '
+                'xmlns="http://www.w3.org/2001/10/synthesis" '
+                'xml:lang="ru-RU"><voice name="ru-RU-SvetlanaNeural">'
+                '<prosody rate="20%">Привет тест</prosody></voice></speak>'
+            ),
+            "timeout": 12,
+        }
+    ]
+
+    await cleanup_temp_file(result.file_path, reason="test_cleanup")
+    test_dir.rmdir()
+
+
+async def test_azure_tts_logs_error_settings_without_api_key(monkeypatch, caplog):
+    class FakeResponse:
+        status_code = 400
+        headers = {"content-type": "text/plain"}
+        text = "bad voice"
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, _url, *, headers, content):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "app.speech.azure_provider.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+
+    provider = AzureSpeechProvider(
+        Settings(
+            azure_speech_key="secret-key",
+            azure_tts_voice="ru-RU-SvetlanaNeural",
+            azure_tts_output_format="ogg-24khz-16bit-mono-opus",
+            azure_tts_rate="20%",
+        )
+    )
+
+    with caplog.at_level("ERROR", logger="app.speech.azure_provider"):
+        with pytest.raises(AzureSpeechStatusError):
+            await provider.synthesize("Hello", "ru")
+
+    record = next(item for item in caplog.records if item.message == "azure_tts_failed")
+    assert record.status_code == 400
+    assert record.body == "bad voice"
+    assert record.voice == "ru-RU-SvetlanaNeural"
+    assert record.output_format == "ogg-24khz-16bit-mono-opus"
+    assert record.rate == "20%"
+    assert "secret-key" not in caplog.text
 
 
 async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
