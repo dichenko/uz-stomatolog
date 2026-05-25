@@ -22,6 +22,12 @@ from app.telegram.keyboards import cancel_appointments_keyboard
 TZ = ZoneInfo("Asia/Tashkent")
 
 
+def _future_window(*, days: int, duration_minutes: int = 60):
+    start = datetime.now(TZ).replace(microsecond=0) + timedelta(days=days)
+    end = start + timedelta(minutes=duration_minutes)
+    return start, end
+
+
 class FakeCalendarService:
     def __init__(self) -> None:
         self.cancelled_event_ids: list[str] = []
@@ -44,9 +50,7 @@ async def test_cancellation_message_returns_active_appointments(session):
         telegram_user_id=3001,
         preferred_language="en",
     )
-    now = datetime(2026, 5, 21, 10, 0, tzinfo=TZ)
-    future_start = now + timedelta(days=2)
-    future_end = future_start + timedelta(minutes=60)
+    future_start, future_end = _future_window(days=2)
     await AppointmentRepository(session).create(
         user_id=user.id,
         service_type="past_cleaning",
@@ -107,9 +111,7 @@ async def test_confirm_cancellation_updates_db_cancels_calendar_and_reminders(
         telegram_username="ali",
         preferred_language="en",
     )
-    now = datetime(2026, 5, 21, 10, 0, tzinfo=TZ)
-    future_start = now + timedelta(days=2)
-    future_end = future_start + timedelta(minutes=60)
+    future_start, future_end = _future_window(days=2)
     appointment = await AppointmentRepository(session).create(
         user_id=user.id,
         service_type="treatment",
@@ -233,9 +235,7 @@ async def test_graph_cancellation_node_returns_appointments(session):
         user_id=user.id,
         telegram_chat_id=3007,
     )
-    now = datetime(2026, 5, 21, 10, 0, tzinfo=TZ)
-    future_start = now + timedelta(days=1)
-    future_end = future_start + timedelta(minutes=60)
+    future_start, future_end = _future_window(days=1)
     await AppointmentRepository(session).create(
         user_id=user.id,
         service_type="cleaning",
