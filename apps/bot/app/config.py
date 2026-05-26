@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     azure_tts_voice: str = "ru-RU-SvetlanaNeural"
     azure_tts_output_format: str = "ogg-24khz-16bit-mono-opus"
     azure_tts_rate: str = "20%"
+    azure_tts_pitch: str = ""
+    azure_tts_range: str = ""
     azure_tts_timeout_ms: int = 60000
     azure_tts_max_chars: int = 5000
 

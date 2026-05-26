@@ -132,6 +132,8 @@ async def test_azure_tts_posts_ssml_to_speech_service(monkeypatch):
             azure_tts_voice="ru-RU-SvetlanaNeural",
             azure_tts_output_format="ogg-24khz-16bit-mono-opus",
             azure_tts_rate="20%",
+            azure_tts_pitch="+2st",
+            azure_tts_range="+10%",
             azure_tts_timeout_ms=12000,
         )
     )
@@ -154,7 +156,8 @@ async def test_azure_tts_posts_ssml_to_speech_service(monkeypatch):
                 '<speak version="1.0" '
                 'xmlns="http://www.w3.org/2001/10/synthesis" '
                 'xml:lang="ru-RU"><voice name="ru-RU-SvetlanaNeural">'
-                '<prosody rate="20%">Привет тест</prosody></voice></speak>'
+                '<prosody rate="20%" pitch="+2st" range="+10%">Привет тест'
+                "</prosody></voice></speak>"
             ),
             "timeout": 12,
         }
@@ -194,6 +197,8 @@ async def test_azure_tts_logs_error_settings_without_api_key(monkeypatch, caplog
             azure_tts_voice="ru-RU-SvetlanaNeural",
             azure_tts_output_format="ogg-24khz-16bit-mono-opus",
             azure_tts_rate="20%",
+            azure_tts_pitch="+2st",
+            azure_tts_range="+10%",
         )
     )
 
@@ -207,6 +212,8 @@ async def test_azure_tts_logs_error_settings_without_api_key(monkeypatch, caplog
     assert record.voice == "ru-RU-SvetlanaNeural"
     assert record.output_format == "ogg-24khz-16bit-mono-opus"
     assert record.rate == "20%"
+    assert record.pitch == "+2st"
+    assert record.range == "+10%"
     assert "secret-key" not in caplog.text
 
 

@@ -99,11 +99,15 @@ class AzureSpeechProvider:
         return f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1"
 
     def _ssml(self, text: str) -> str:
-        rate = self.settings.azure_tts_rate.strip()
+        prosody_attributes = _prosody_attributes(
+            rate=self.settings.azure_tts_rate,
+            pitch=self.settings.azure_tts_pitch,
+            range_=self.settings.azure_tts_range,
+        )
         escaped_text = escape(text)
         body = (
-            f'<prosody rate="{escape(rate, quote=True)}">{escaped_text}</prosody>'
-            if rate
+            f"<prosody {prosody_attributes}>{escaped_text}</prosody>"
+            if prosody_attributes
             else escaped_text
         )
         language = escape(self.settings.azure_tts_language, quote=True)
@@ -128,6 +132,8 @@ class AzureSpeechProvider:
                 "language": self.settings.azure_tts_language,
                 "output_format": self.settings.azure_tts_output_format,
                 "rate": self.settings.azure_tts_rate,
+                "pitch": self.settings.azure_tts_pitch,
+                "range": self.settings.azure_tts_range,
             },
         )
 
@@ -149,6 +155,8 @@ class AzureSpeechProvider:
                 "language": self.settings.azure_tts_language,
                 "output_format": self.settings.azure_tts_output_format,
                 "rate": self.settings.azure_tts_rate,
+                "pitch": self.settings.azure_tts_pitch,
+                "range": self.settings.azure_tts_range,
             },
         )
         return AzureSpeechStatusError(
@@ -161,6 +169,18 @@ class AzureSpeechStatusError(RuntimeError):
     def __init__(self, message: str, status_code: int) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+def _prosody_attributes(*, rate: str, pitch: str, range_: str) -> str:
+    attributes = []
+    for name, value in (
+        ("rate", rate.strip()),
+        ("pitch", pitch.strip()),
+        ("range", range_.strip()),
+    ):
+        if value:
+            attributes.append(f'{name}="{escape(value, quote=True)}"')
+    return " ".join(attributes)
 
 
 def _prepare_text_for_tts(text: str) -> str:
