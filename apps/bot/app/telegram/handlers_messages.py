@@ -7,11 +7,11 @@ from aiogram.types import FSInputFile, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.settings_reader import get_tts_prompt
+from app.agent import run_agent
 from app.config import get_settings
 from app.db.models import Conversation, User
 from app.db.models import Message as DbMessage
 from app.db.repositories import MessageRepository
-from app.agent import run_agent
 from app.graph import GraphResult
 from app.graph.state import InputType
 from app.speech import create_speech_providers
