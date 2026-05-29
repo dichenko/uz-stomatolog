@@ -20,9 +20,39 @@ TEXTS: dict[str, dict[Language, str]] = {
         "en": "Choose your language:",
     },
     "language_saved": {
-        "ru": "Язык сохранён. Чем могу помочь?",
-        "uz": "Til saqlandi. Qanday yordam bera olaman?",
-        "en": "Language saved. How can I help?",
+        "ru": (
+            "Здравствуйте! 👋\n"
+            "Я Мадина — голосовой AI-ассистент для стоматологий. Работаю "
+            "круглосуточно текстом и голосом на узбекском, русском и английском.\n\n"
+            "Могу записать к стоматологу, ответить о ценах и услугах, помочь срочно, "
+            "если болит зуб.\n\n"
+            "Если вы собственник клиники и хотите познакомиться со мной как с "
+            "AI-администратором для вашей команды — просто скажите, "
+            "и я расскажу о себе.\n\n"
+            "Чем могу быть полезна?"
+        ),
+        "uz": (
+            "Assalomu alaykum! 👋\n"
+            "Men Madina — stomatologiya klinikalari uchun ovozli AI-yordamchiman. "
+            "Kechayu kunduz o'zbek, rus va ingliz tillarida matn va ovoz "
+            "orqali ishlayman.\n\n"
+            "Stomatologga yozish, narxlar va xizmatlar haqida ma'lumot berish, "
+            "tish og'riganda tez yordam berishim mumkin.\n\n"
+            "Agar siz klinika egasi bo'lsangiz va meni jamoangiz uchun "
+            "AI-administrator sifatida bilishni xohlasangiz — ayting, "
+            "men o'zim haqimda gapirib beraman.\n\n"
+            "Sizga qanday yordam bera olaman?"
+        ),
+        "en": (
+            "Hello! 👋\n"
+            "I'm Madina — a voice AI-assistant for dental clinics. I work 24/7 in "
+            "Uzbek, Russian, and English by text and voice.\n\n"
+            "I can book a dental appointment, answer about prices and services, and "
+            "help urgently if you have toothache.\n\n"
+            "If you're a clinic owner and want to meet me as an AI-administrator for "
+            "your team, just say so and I'll tell you about myself.\n\n"
+            "How can I be of help?"
+        ),
     },
     "welcome": {
         "ru": "Здравствуйте. Я административный ассистент стоматологической клиники.",

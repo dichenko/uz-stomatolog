@@ -90,6 +90,7 @@ def _compile_graph(
     workflow.add_node("classify_intent", nodes["classify_intent"])
     workflow.add_node("safety_guard", nodes["safety_guard"])
     workflow.add_node("admin_faq", nodes["admin_faq"])
+    workflow.add_node("owner_sales", nodes["owner_sales"])
     workflow.add_node("view_appointments", nodes["view_appointments"])
     workflow.add_node("start_booking", nodes["start_booking"])
     workflow.add_node("continue_booking", nodes["continue_booking"])
@@ -106,6 +107,7 @@ def _compile_graph(
         route_intent,
         {
             "admin_faq": "admin_faq",
+            "owner_sales": "owner_sales",
             "view_appointments": "view_appointments",
             "start_booking": "start_booking",
             "cancel_appointment": "cancel_appointment",
@@ -116,6 +118,7 @@ def _compile_graph(
     )
     for terminal_node in (
         "admin_faq",
+        "owner_sales",
         "view_appointments",
         "start_booking",
         "cancel_appointment",
@@ -168,6 +171,12 @@ def _initial_state(
         "admin_notification_sent": False,
         "admin_message_id": None,
         "tool_calls": [],
+        "owner_sales_stage": None,
+        "owner_name": None,
+        "owner_clinic_name": None,
+        "owner_locations": None,
+        "owner_contact": None,
+        "owner_phone": None,
     }
 
 
@@ -191,6 +200,12 @@ def _result_from_state(state: BotState) -> GraphResult:
             "escalation_phone": state["escalation_phone"],
             "admin_notification_sent": state["admin_notification_sent"],
             "admin_message_id": state["admin_message_id"],
+            "owner_sales_stage": state.get("owner_sales_stage"),
+            "owner_name": state.get("owner_name"),
+            "owner_clinic_name": state.get("owner_clinic_name"),
+            "owner_locations": state.get("owner_locations"),
+            "owner_contact": state.get("owner_contact"),
+            "owner_phone": state.get("owner_phone"),
             "tool_calls": state["tool_calls"],
         },
     )

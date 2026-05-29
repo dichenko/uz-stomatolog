@@ -28,6 +28,7 @@ class FakeAdminBot:
 def test_intent_classifier_detects_core_flows():
     assert classify_intent_text("How much does cleaning cost?") == "admin_faq"
     assert classify_intent_text("I want to book an appointment") == "book_appointment"
+    assert classify_intent_text("I own a clinic and want a demo") == "owner_sales"
     assert classify_intent_text("какие у меня есть записи?") == "view_appointments"
     assert classify_intent_text("Cancel my appointment") == "cancel_appointment"
     assert classify_intent_text("What medicine should I take?") == "medical_question"
@@ -149,6 +150,99 @@ async def test_graph_starts_booking_controlled_flow(session):
     assert result.metadata["doctor_type"] == "therapist"
     assert result.metadata["missing_fields"] == ["patient_name", "phone"]
     assert "patient" in result.final_response_text.casefold()
+
+
+async def test_graph_owner_sales_warm_lead_notifies_admin(session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.admin_notify.get_settings",
+        lambda: Settings(admin_telegram_chat_id="-100123"),
+    )
+    admin_bot = FakeAdminBot()
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1020,
+        telegram_username="owner",
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1020,
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-owner-warm",
+        telegram_chat_id=1020,
+        input_text="I own Beverly Dental and want to see how you work",
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+        admin_bot=admin_bot,
+    )
+
+    assert result.intent == "owner_sales"
+    assert result.metadata["owner_clinic_name"] == "Beverly Dental"
+    assert result.metadata["owner_sales_stage"] == "demo_intro"
+    assert conversation.current_flow == "owner_sales"
+    assert len(admin_bot.messages) >= 1
+    assert "Sales lead" in admin_bot.messages[0]["text"]
+    admin_text = "\n".join(message["text"] for message in admin_bot.messages)
+    assert "Beverly Dental" in admin_text
+    assert any(
+        call["tool"] == "notify_sales" and call["stage"] == "warm"
+        for call in result.metadata["tool_calls"]
+    )
+
+
+async def test_graph_owner_sales_hot_lead_persists_and_notifies(session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.admin_notify.get_settings",
+        lambda: Settings(admin_telegram_chat_id="-100123"),
+    )
+    admin_bot = FakeAdminBot()
+    user = await UserRepository(session).upsert_from_telegram(
+        telegram_user_id=1021,
+        telegram_username="alisher",
+        preferred_language="en",
+    )
+    conversation = await ConversationRepository(session).get_or_create(
+        user_id=user.id,
+        telegram_chat_id=1021,
+    )
+
+    result = await run_bot_graph(
+        session=session,
+        user=user,
+        conversation=conversation,
+        trace_id="graph-trace-owner-hot",
+        telegram_chat_id=1021,
+        input_text=(
+            "I want to connect you. My name is Alisher, Beverly Dental, "
+            "2 locations, phone +998 90 555 12 34"
+        ),
+        input_type="text",
+        preferred_language="en",
+        telegram_profile={},
+        admin_bot=admin_bot,
+    )
+
+    escalations = (await session.execute(select(Escalation))).scalars().all()
+    reasons = {item.reason for item in escalations}
+
+    assert result.intent == "owner_sales"
+    assert result.metadata["owner_sales_stage"] == "hot"
+    assert result.metadata["owner_name"] == "Alisher"
+    assert result.metadata["owner_clinic_name"] == "Beverly Dental"
+    assert result.metadata["owner_locations"] == 2
+    assert result.metadata["owner_phone"] == "+998905551234"
+    assert result.metadata["admin_notification_sent"] is True
+    assert "sales_hot" in reasons
+    assert "Ivan" in result.final_response_text
+    assert any(
+        call["tool"] == "notify_sales" and call["stage"] == "hot"
+        for call in result.metadata["tool_calls"]
+    )
 
 
 async def test_graph_lists_user_appointments_by_telegram_user(session):

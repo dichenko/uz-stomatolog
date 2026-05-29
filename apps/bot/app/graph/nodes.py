@@ -18,6 +18,10 @@ from app.services.booking import handle_booking_message, is_booking_in_progress
 from app.services.cancellation import handle_cancellation_message
 from app.services.clinic_knowledge import get_clinic_knowledge
 from app.services.faq import generate_admin_faq_answer
+from app.services.owner_sales import (
+    handle_owner_sales_message,
+    is_owner_sales_in_progress,
+)
 from app.services.rescheduling import (
     handle_reschedule_message,
     is_rescheduling_in_progress,
@@ -65,9 +69,12 @@ def build_nodes(
             current_flow=conversation.current_flow,
             current_state=conversation.current_state,
         )
-        if is_booking_in_progress(conversation):
+        if is_owner_sales_in_progress(conversation):
+            intent = "owner_sales"
+        elif is_booking_in_progress(conversation):
             exit_intents = (
                 "admin_faq",
+                "owner_sales",
                 "view_appointments",
                 "cancel_appointment",
                 "reschedule_appointment",
@@ -157,6 +164,37 @@ def build_nodes(
                 *escalation_payload.pop("tool_calls", []),
             ],
             **escalation_payload,
+        }
+
+    async def owner_sales(state: BotState) -> dict[str, Any]:
+        language = state["preferred_language"]
+        result = await handle_owner_sales_message(
+            session=session,
+            user=user,
+            conversation=conversation,
+            input_text=state["input_text"],
+            language=language,
+            admin_bot=admin_bot,
+        )
+        return {
+            "final_response_text": result.text,
+            "owner_sales_stage": result.stage,
+            "owner_name": result.owner_name,
+            "owner_clinic_name": result.clinic_name,
+            "owner_locations": result.locations,
+            "owner_contact": result.owner_contact,
+            "owner_phone": result.phone,
+            "admin_notification_sent": (
+                state["admin_notification_sent"]
+                or result.admin_notification_sent
+            ),
+            "admin_message_id": (
+                result.admin_message_id or state["admin_message_id"]
+            ),
+            "tool_calls": [
+                *state["tool_calls"],
+                *result.tool_calls,
+            ],
         }
 
     async def start_booking(state: BotState) -> dict[str, Any]:
@@ -274,6 +312,7 @@ def build_nodes(
         "classify_intent": classify_intent,
         "safety_guard": safety_guard,
         "admin_faq": admin_faq,
+        "owner_sales": owner_sales,
         "view_appointments": view_appointments,
         "start_booking": start_booking,
         "continue_booking": start_booking,
@@ -387,6 +426,8 @@ def _build_admin_notification_text(
 def route_intent(state: BotState) -> str:
     intent = state["intent"]
     safety_status = state["safety_status"]
+    if intent == "owner_sales":
+        return "owner_sales"
     if safety_status in {"emergency", "needs_escalation"}:
         return "emergency_or_escalation"
     if intent == "medical_question":

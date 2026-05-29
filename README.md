@@ -90,6 +90,64 @@ apps/bot/app/clinic_knowledge/en.md
 
 On startup the app loads these files into `clinic_knowledge` if the table is empty. FAQ answers are constrained to the knowledge base; unknown questions receive a callback/admin clarification message instead of invented details.
 
+## Text LLM
+
+Основная текстовая модель ассистента настраивается отдельно от STT/TTS. Сейчас основной провайдер:
+
+```text
+TEXT_LLM_PROVIDER=claude
+CLAUDE_TEXT_MODEL=claude-sonnet-4-5-20250929
+```
+
+`CLAUDE_API_KEY` должен быть задан в `.env`. OpenAI text model (`OPENAI_TEXT_MODEL`) оставлен только как fallback, если явно переключить `TEXT_LLM_PROVIDER=openai`; OpenAI STT/TTS настройки продолжают использоваться для речи.
+
+## LangChain / LangGraph Agent Tools
+
+Агент собран как LangGraph workflow, а не как свободный LangChain agent с `@tool`. Доступные действия фиксируются в `tool_calls` внутри `execution_runs` и вызываются из узлов графа или callback-сценариев.
+
+### Режим A: пациент клиники
+
+Инструменты и действия для обычного пациента:
+
+- `get_user_profile` - загрузить профиль Telegram-пользователя, язык, имя пациента и основной телефон из БД.
+- `get_clinic_knowledge` - получить базу знаний клиники на выбранном языке и ответить только по административной информации из нее.
+- `find_available_slots` - найти свободные окна для записи с учетом занятости Google Calendar, типа услуги, типа врача и рабочих правил слотов.
+- `find_user_appointments` - показать активные будущие записи пользователя; используется для просмотра, отмены и переноса.
+- `create_escalation` - создать эскалацию в БД, если вопрос неизвестен, ситуация срочная, пользователь злится, просит скидку или услуга нестандартная.
+- `send_admin_notification` - отправить сообщение в Telegram-чат менеджеров/админов (`ADMIN_TELEGRAM_CHAT_ID`) о новой записи, отмене, переносе или эскалации.
+
+Дополнительные действия выполняются при подтверждении пользователем inline-кнопок:
+
+- подтверждение записи создает `appointments` в БД, создает событие в Google Calendar, планирует напоминания за 24 часа и за 2 часа, затем уведомляет админ-чат;
+- отмена записи переводит appointment в `cancelled`, удаляет/отменяет событие в Google Calendar, отменяет будущие напоминания и уведомляет админ-чат;
+- перенос записи подбирает новые свободные слоты, обновляет время appointment и событие в Google Calendar, пересоздает напоминания и уведомляет админ-чат.
+
+Если Google Calendar не настроен, календарные действия пропускаются, но запись в БД и уведомления админам продолжают работать.
+
+### Режим B: собственник клиники / продажа VoiceFlow
+
+Агент определяет owner/product intent по сообщениям вроде: "я владелец клиники", "расскажи о себе", "кто ты", "сколько ты стоишь", "хочу посмотреть, как ты работаешь", "можешь работать у меня", `VoiceFlow`, `clinic owner`, `I own a clinic`.
+
+В этом режиме Мадина продает себя как AI-администратора: знакомится с собственником, фиксирует название клиники, показывает демо-роль администратора, отвечает на условия подключения, обрабатывает возражения и оформляет заявку.
+
+Новые инструменты:
+
+- `notify_sales` - сохраняет sales lead в таблице `escalations` (`reason=sales_warm`, `sales_hot`, `sales_cold_lead`) и отправляет уведомление в `ADMIN_TELEGRAM_CHAT_ID`. Вызывается сразу при owner-сигнале, повторно при захвате названия клиники, и обязательно при согласии подключиться.
+- `handoff_to_amir` - сохраняет передачу Амиру (`reason=handoff_to_amir`) и уведомляет админ-чат, когда собственник углубляется в privacy/security, интересуется AI вне VoiceFlow или колеблется.
+- `schedule_followup` - сохраняет договоренность о возврате к разговору (`reason=sales_followup`) и уведомляет админ-чат; внешний n8n-контур может использовать это уведомление для отложенного сообщения. Используется, когда собственнику сейчас неудобно и он назвал время для продолжения.
+
+Поведение режима B:
+
+- при первом owner-сигнале агент сразу создает `warm` lead, даже если данных мало;
+- когда агент узнает название клиники, он сохраняет еще один `warm` lead с `clinic_name`;
+- если собственник хочет примерку, агент переходит в демо-режим администратора и использует название клиники собственника в ключевых ответах;
+- в демо-режиме адрес демо-клиники не называется: агент отвечает, что адрес уточнит администратор после подключения;
+- при вопросе о цене агент отвечает: `$100` в месяц за локацию, считает сумму по количеству локаций, если оно известно;
+- при "беру", "давайте подключим", "I want to connect" агент собирает только недостающие данные и вызывает `notify_sales(stage="hot")`;
+- если не хватает имени, названия клиники, количества локаций или телефона, агент не теряет заявку: продолжает сбор данных, а первичный `warm` lead уже сохранен;
+- если собственник просит продолжить позже, агент предлагает согласовать время и вызывает `schedule_followup`;
+- если Telegram-уведомление не ушло из-за отсутствия `admin_bot` или `ADMIN_TELEGRAM_CHAT_ID`, запись все равно остается в `escalations`.
+
 ## Speech
 
 Voice messages are handled through isolated speech providers:
@@ -226,15 +284,3 @@ Push to `main` triggers `.github/workflows/deploy.yml` which:
 3. Rebuild and restart `bot` container
 4. Run DB migrations
 5. Show container status and recent logs
-
-## Human Owner TODO
-
-- Provide final Muxlisa credentials.
-- Confirm exact OpenAI text/STT/TTS model choices after real voice QA.
-- Configure Google Calendar service account.
-- Provide real admin Telegram group ID.
-- Provide final clinic knowledge base text in RU/UZ/EN.
-- Provide final webhook domain.
-- Decide whether Uzbek Cyrillic should become a separate UI language later.
-- Decide whether reminders should support voice later.
-- Confirm legal/medical disclaimer text before production launch.

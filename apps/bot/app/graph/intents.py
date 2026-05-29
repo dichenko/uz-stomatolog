@@ -3,15 +3,14 @@ import logging
 from typing import Any, Literal
 
 from langsmith import traceable
-from langsmith.wrappers import wrap_openai
-from openai import AsyncOpenAI
 
-from app.config import get_settings
+from app.services.text_llm import complete_text
 
 logger = logging.getLogger(__name__)
 
 Intent = Literal[
     "admin_faq",
+    "owner_sales",
     "view_appointments",
     "book_appointment",
     "cancel_appointment",
@@ -82,6 +81,50 @@ MEDICAL_KEYWORDS = (
     "antibiotic",
     "diagnose",
 )
+OWNER_SALES_KEYWORDS = (
+    "я владелец",
+    "я собственник",
+    "собственник клиники",
+    "владелец клиники",
+    "директор клиники",
+    "руководитель клиники",
+    "у меня клиника",
+    "моя клиника",
+    "расскажи о себе",
+    "кто ты",
+    "сколько ты стоишь",
+    "сколько это стоит",
+    "сколько стоит подключ",
+    "можешь работать у меня",
+    "работать у меня",
+    "хочу посмотреть как ты работаешь",
+    "хочу посмотреть, как ты работаешь",
+    "покажи как ты работаешь",
+    "демо",
+    "примерка",
+    "voiceflow",
+    "ai-администратор",
+    "ai администратор",
+    "ai ассистент",
+    "ai-assistant",
+    "ai assistant",
+    "clinic owner",
+    "i own a clinic",
+    "my clinic",
+    "tell me about yourself",
+    "who are you",
+    "how much do you cost",
+    "can you work for me",
+    "want to see how you work",
+    "demo",
+    "connect you",
+    "klinika egasi",
+    "men klinika egasiman",
+    "klinikam bor",
+    "o'zingiz haqingizda",
+    "kim siz",
+    "qancha turasiz",
+)
 
 
 @traceable(name="classify_intent")
@@ -116,6 +159,8 @@ def classify_intent_rules(text: str) -> Intent | None:
         return "unknown"
     if normalized.startswith("/my_appointments"):
         return "view_appointments"
+    if _contains_any(normalized, OWNER_SALES_KEYWORDS):
+        return "owner_sales"
     if _contains_any(normalized, EMERGENCY_KEYWORDS):
         return "emergency"
     if _contains_any(normalized, MEDICAL_KEYWORDS):
@@ -147,6 +192,8 @@ def classify_intent_text(text: str) -> Intent:
         return "reschedule_appointment"
     if _contains_any(normalized, VIEW_APPOINTMENTS_KEYWORDS):
         return "view_appointments"
+    if _contains_any(normalized, OWNER_SALES_KEYWORDS):
+        return "owner_sales"
     if _contains_any(normalized, BOOKING_KEYWORDS):
         return "book_appointment"
     if _contains_any(normalized, DISCOUNT_KEYWORDS):
@@ -171,25 +218,10 @@ async def _try_llm_classify_intent(
     current_flow: str | None,
     current_state: str | None,
 ) -> Intent | None:
-    settings = get_settings()
-    if settings.openai_api_key is None:
-        return None
-
-    api_key = settings.openai_api_key.get_secret_value().strip()
-    if not api_key:
-        return None
-
     try:
-        client = wrap_openai(
-            AsyncOpenAI(
-                api_key=api_key,
-                base_url=settings.openai_base_url or None,
-            )
-        )
-        response = await client.chat.completions.create(
-            model=settings.openai_text_model,
+        content = await complete_text(
             temperature=0,
-            response_format={"type": "json_object"},
+            response_format="json_object",
             messages=[
                 {
                     "role": "system",
@@ -206,7 +238,6 @@ async def _try_llm_classify_intent(
                 },
             ],
         )
-        content = response.choices[0].message.content
         if not content:
             return None
         return _parse_llm_intent(content)
@@ -246,6 +277,7 @@ def _coerce_confidence(value: Any) -> float:
 def _valid_intents() -> set[str]:
     return {
         "admin_faq",
+        "owner_sales",
         "view_appointments",
         "book_appointment",
         "cancel_appointment",
@@ -265,7 +297,10 @@ def _intent_router_system_prompt() -> str:
         "Return only JSON with keys: intent, confidence, reason. "
         "Allowed intents: admin_faq, view_appointments, book_appointment, "
         "cancel_appointment, reschedule_appointment, medical_question, emergency, "
-        "discount_request, non_standard_service, angry_user, unknown. "
+        "discount_request, non_standard_service, angry_user, owner_sales, unknown. "
+        "Use owner_sales when the user is a clinic owner, asks who the assistant is, "
+        "asks about VoiceFlow, wants a demo, asks pricing for the assistant, or asks "
+        "how to connect the assistant to their clinic. "
         "Use view_appointments when the user asks whether they already have "
         "appointments or asks to show existing appointments. "
         "Use book_appointment only when the user wants to create a new appointment. "

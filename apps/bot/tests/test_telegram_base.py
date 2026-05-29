@@ -21,8 +21,9 @@ def test_language_keyboard_contains_supported_languages():
 
 
 def test_texts_are_localized_and_language_falls_back_to_ru():
-    assert text("language_saved", "en").startswith("Language saved")
-    assert text("language_saved", "uz").startswith("Til saqlandi")
+    assert text("language_saved", "en").startswith("Hello")
+    assert "Madina" in text("language_saved", "en")
+    assert text("language_saved", "uz").startswith("Assalomu alaykum")
     assert normalize_language("unknown") == "ru"
 
 

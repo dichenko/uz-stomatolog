@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_base_url: str | None = None
     openai_text_model: str = "gpt-4.1-mini"
+    text_llm_provider: Literal["claude", "openai"] = "claude"
+    claude_api_key: SecretStr | None = None
+    claude_base_url: str = "https://api.anthropic.com"
+    claude_text_model: str = "claude-sonnet-4-5-20250929"
+    claude_timeout_ms: int = 60000
+    claude_max_tokens: int = 2048
     openai_stt_model: str = "gpt-4o-transcribe"
     openai_stt_language: str = "ru"
     openai_stt_response_format: str = "json"

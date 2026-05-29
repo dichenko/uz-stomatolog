@@ -48,6 +48,12 @@ class BotState(TypedDict):
 
     faq_answered: NotRequired[bool]
     faq_source: NotRequired[str]
+    owner_sales_stage: NotRequired[str | None]
+    owner_name: NotRequired[str | None]
+    owner_clinic_name: NotRequired[str | None]
+    owner_locations: NotRequired[int | None]
+    owner_contact: NotRequired[str | None]
+    owner_phone: NotRequired[str | None]
 
 
 @dataclass(frozen=True)

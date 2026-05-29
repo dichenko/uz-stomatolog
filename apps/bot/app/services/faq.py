@@ -3,18 +3,16 @@ import re
 from dataclasses import dataclass
 
 from langsmith import traceable
-from langsmith.wrappers import wrap_openai
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.settings_reader import get_clinic_info, get_system_prompt
-from app.config import get_settings
 from app.db.models import Conversation, User
 from app.services.llm_context import (
     LlmContext,
     build_llm_context,
     build_openai_context_messages,
 )
+from app.services.text_llm import ChatMessage, complete_text
 from app.telegram.texts import Language, normalize_language
 
 logger = logging.getLogger(__name__)
@@ -210,15 +208,15 @@ async def generate_admin_faq_answer(
             source="safety_rules",
         )
 
-    openai_answer = await _try_openai_answer(
+    llm_answer = await _try_openai_answer(
         question=question,
         language=normalized_language,
         knowledge=knowledge,
         session=session,
         llm_context=llm_context,
     )
-    if openai_answer is not None:
-        return FaqAnswer(text=openai_answer, answered=True, source="openai")
+    if llm_answer is not None:
+        return FaqAnswer(text=llm_answer, answered=True, source="llm")
 
     topic = _detect_topic(question)
     if topic is None:
@@ -251,14 +249,6 @@ async def _try_openai_answer(
     session: AsyncSession | None = None,
     llm_context: LlmContext | None = None,
 ) -> str | None:
-    settings = get_settings()
-    if settings.openai_api_key is None:
-        return None
-
-    api_key = settings.openai_api_key.get_secret_value().strip()
-    if not api_key:
-        return None
-
     system_prompt = ""
     if session is not None:
         try:
@@ -266,7 +256,7 @@ async def _try_openai_answer(
         except Exception:
             logger.exception("admin_get_system_prompt_failed")
 
-    messages: list[dict[str, str]] = [
+    messages: list[ChatMessage] = [
         {
             "role": "system",
             "content": (
@@ -299,16 +289,12 @@ async def _try_openai_answer(
     )
 
     try:
-        client = wrap_openai(AsyncOpenAI(api_key=api_key))
-        response = await client.chat.completions.create(
-            model=settings.openai_text_model,
+        return await complete_text(
             temperature=0,
             messages=messages,
         )
-        answer = response.choices[0].message.content
-        return answer.strip() if answer else None
     except Exception:
-        logger.exception("openai_faq_generation_failed")
+        logger.exception("faq_llm_generation_failed")
         return None
 
 
