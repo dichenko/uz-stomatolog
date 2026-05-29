@@ -27,7 +27,7 @@ class SpeechProviders:
         if normalized_language == "uz":
             return self.muxlisa
         if normalized_language == "ru":
-            return self.azure
+            return self.yandex
         return self.openai
 
 
