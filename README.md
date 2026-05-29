@@ -6,7 +6,7 @@ Current implementation includes: infrastructure foundation, database schema/repo
 
 ## Stack
 
-- Python 3.12
+- Python 3.12 
 - FastAPI HTTP entrypoint for health checks and Telegram webhook
 - PostgreSQL 16
 - Docker Compose
