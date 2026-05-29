@@ -26,7 +26,7 @@ def test_speech_factory_routes_languages_to_expected_providers():
     assert providers.stt_for_language("uz") is providers.muxlisa
     assert providers.tts_for_language("uz") is providers.muxlisa
     assert providers.stt_for_language("ru") is providers.openai
-    assert providers.tts_for_language("ru") is providers.azure
+    assert providers.tts_for_language("ru") is providers.yandex
     assert providers.stt_for_language("en") is providers.openai
     assert providers.tts_for_language("en") is providers.openai
 
