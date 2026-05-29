@@ -2,6 +2,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from aiogram.exceptions import TelegramAPIError
+
 from app.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,18 @@ async def send_admin_notification(
         )
         return AdminNotificationResult(sent=False, admin_chat_id=admin_chat_id)
 
-    sent_message = await bot.send_message(chat_id=admin_chat_id, text=message_text)
+    try:
+        sent_message = await bot.send_message(chat_id=admin_chat_id, text=message_text)
+    except TelegramAPIError as exc:
+        logger.exception(
+            "admin_notification_failed",
+            extra={
+                "admin_chat_id": admin_chat_id,
+                "telegram_error": str(exc),
+            },
+        )
+        return AdminNotificationResult(sent=False, admin_chat_id=admin_chat_id)
+
     message_id = getattr(sent_message, "message_id", None)
     logger.info(
         "admin_notification_sent",
