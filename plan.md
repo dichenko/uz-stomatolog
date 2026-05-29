@@ -20,15 +20,10 @@
 - [x] 2.4 `update_appointment(appointment_id, new_datetime?, new_doctor?)` — перенос записи
 - [x] 2.5 `cancel_appointment(appointment_id, reason?)` — отмена записи
 - [x] 2.6 `view_appointments()` — показать активные записи пользователя
-- [x] 2.7 `order_taxi(pickup, destination, when)` — заказ такси (плейсхолдер)
-- [x] 2.8 `order_pharmacy(items, address, when?)` — заказ лекарств (плейсхолдер)
-- [x] 2.9 `escalate_to_admin(summary, patient_contact, urgency)` — эскалация администратору
+- [x] 2.7 `escalate_to_admin(summary, patient_contact, urgency)` — эскалация администратору
 
 ### Режим B (Собственник)
-- [x] 2.10 `notify_sales(stage, clinic_name, owner_contact, details)` — алерт в Telegram-канал продаж
-- [x] 2.11 `handoff_to_amir(clinic_name, owner_contact, conversation_summary, development_zone)` — передача Амиру
-- [x] 2.12 `schedule_followup(owner_contact, when_iso, context_summary, timezone)` — возврат к разговору
-- [x] 2.13 `send_invoice(owner_name, clinic_name, phone, amount, locations)` — отправка счёта (плейсхолдер)
+- [x] 2.8 `notify_sales(stage, owner_name?, clinic_name?, owner_contact?, locations?, details?)` — оповещение в чат администраторов
 
 ## Этап 3. Middleware — `apps/bot/app/agent/tools.py`
 

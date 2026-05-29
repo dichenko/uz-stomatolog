@@ -339,60 +339,6 @@ async def view_appointments(config: RunnableConfig) -> str:
     return "\n".join(lines)
 
 
-class OrderTaxiInput(BaseModel):
-    pickup: str = Field(description="Адрес подачи (адрес клиники или пациента)")
-    destination: str = Field(description="Адрес назначения")
-    when: str | None = Field(default=None, description="Когда подать: сейчас или дата/время")
-
-
-@tool(args_schema=OrderTaxiInput)
-async def order_taxi(pickup: str, destination: str, when: str | None = None, config: RunnableConfig = None) -> str:
-    """Заказать такси для пациента. Только по явной просьбе пациента."""
-    session = _get_session(config)
-    user = _get_user(config)
-    admin_bot = _get_admin_bot(config)
-
-    esc_repo = EscalationRepository(session)
-    esc = await esc_repo.create(
-        user_id=user.id,
-        reason="taxi",
-        summary=f"Заказ такси: от {pickup} до {destination}, когда: {when or 'сейчас'}",
-    )
-    await send_admin_notification(
-        bot=admin_bot,
-        message_text=f"Заказ такси: pickup={pickup}, destination={destination}, when={when or 'сейчас'}, user_id={user.id}",
-    )
-    await session.flush()
-    return f"Заявка на такси создана (escalation #{esc.id}). Администратор свяжется для уточнения."
-
-
-class OrderPharmacyInput(BaseModel):
-    items: str = Field(description="Список лекарств через запятую")
-    address: str = Field(description="Адрес доставки")
-    when: str | None = Field(default=None, description="Когда доставить")
-
-
-@tool(args_schema=OrderPharmacyInput)
-async def order_pharmacy(items: str, address: str, when: str | None = None, config: RunnableConfig = None) -> str:
-    """Заказать лекарства из аптеки. Только по явной просьбе пациента."""
-    session = _get_session(config)
-    user = _get_user(config)
-    admin_bot = _get_admin_bot(config)
-
-    esc_repo = EscalationRepository(session)
-    esc = await esc_repo.create(
-        user_id=user.id,
-        reason="pharmacy",
-        summary=f"Заказ лекарств: {items}, адрес: {address}, когда: {when or 'сейчас'}",
-    )
-    await send_admin_notification(
-        bot=admin_bot,
-        message_text=f"Заказ аптеки: items={items}, address={address}, when={when or 'сейчас'}, user_id={user.id}",
-    )
-    await session.flush()
-    return f"Заявка на лекарства создана (escalation #{esc.id}). Администратор свяжется для уточнения."
-
-
 class EscalateToAdminInput(BaseModel):
     summary: str = Field(description="Краткое описание ситуации")
     patient_contact: str = Field(description="Контакт пациента: телефон или @username")
@@ -401,8 +347,9 @@ class EscalateToAdminInput(BaseModel):
 
 @tool(args_schema=EscalateToAdminInput)
 async def escalate_to_admin(summary: str, patient_contact: str, urgency: str = "normal", config: RunnableConfig = None) -> str:
-    """Эскалировать вопрос администратору клиники. Использовать при жалобах, возвратах, юридических вопросах,
-    запросе медкарты, просьбе соединить с человеком, или если услуга/цена не найдена после двух поисков."""
+    """Эскалировать вопрос администратору клиники. Использовать при: жалобах на качество/врача, возврате средств,
+    юридических вопросах, запросе медкарты, просьбе соединить с человеком, заказе такси, заказе лекарств,
+    а также если услуга/цена не найдена после двух поисков."""
     session = _get_session(config)
     user = _get_user(config)
     admin_bot = _get_admin_bot(config)
@@ -428,35 +375,48 @@ async def escalate_to_admin(summary: str, patient_contact: str, urgency: str = "
 
 # ──────────────────── Owner/Sales tools (Режим B) ────────────────────
 
-SHEVTSOV_TG = "@softretail"
-SHEVTSOV_PHONE = "+998 50 890 98 33"
-AMIR_BOT = "@Ai_Soft_Retail_a8i_bot"
-
 
 class NotifySalesInput(BaseModel):
-    stage: str = Field(description="Этап продаж: warm, hot, cold_lead")
+    stage: str = Field(description="Этап: warm или hot")
+    owner_name: str | None = Field(default=None, description="Имя собственника (для hot)")
     clinic_name: str | None = Field(default=None, description="Название клиники")
-    owner_contact: str = Field(description="Контакт собственника: @username или телефон")
-    details: str | None = Field(default=None, description="Детали: имя, локации, сумма")
+    owner_contact: str | None = Field(default=None, description="Контакт: телефон или @username")
+    locations: int | None = Field(default=None, description="Количество филиалов (опционально)")
+    details: str | None = Field(default=None, description="Детали или резюме диалога")
 
 
 @tool(args_schema=NotifySalesInput)
 async def notify_sales(
     stage: str,
-    clinic_name: str | None,
-    owner_contact: str,
+    owner_name: str | None = None,
+    clinic_name: str | None = None,
+    owner_contact: str | None = None,
+    locations: int | None = None,
     details: str | None = None,
     config: RunnableConfig = None,
 ) -> str:
-    """Отправить алерт в Telegram-канал «Заказы от Мадины».
-    stage='warm' — собственник назвал клинику, идёт примерка.
-    stage='hot' — собственник согласился подключиться.
-    stage='cold_lead' — собственник не ответил после возвратного сообщения."""
+    """Отправить оповещение в чат администраторов AI Soft Retail.
+    stage='warm' — собственник проявил интерес. Отправляется ссылка на TG пользователя и краткое резюме.
+    stage='hot' — собственник готов купить. Отправляется имя, телефон, клиника, филиалы."""
     session = _get_session(config)
     user = _get_user(config)
     admin_bot = _get_admin_bot(config)
 
-    summary = f"Sales lead\n\nStage: {stage}\nClinic: {clinic_name or '-'}\nContact: {owner_contact}\nDetails: {details or '-'}"
+    tg_link = f"https://t.me/{user.telegram_username}" if user.telegram_username else f"tg://user?id={user.telegram_user_id}"
+
+    if stage == "warm":
+        summary = f"WARM LEAD\n\nTG: {tg_link}\nClinic: {clinic_name or '-'}\nContact: {owner_contact or '-'}\nSummary: {details or '-'}"
+    else:
+        summary = (
+            f"HOT LEAD — ГОТОВ К ПОКУПКЕ\n\n"
+            f"TG: {tg_link}\n"
+            f"Имя: {owner_name or '-'}\n"
+            f"Телефон: {owner_contact or '-'}\n"
+            f"Клиника: {clinic_name or '-'}\n"
+            f"Филиалы: {locations or 1}\n"
+            f"Детали: {details or '-'}"
+        )
+
     esc = await EscalationRepository(session).create(user_id=user.id, reason=f"sales_{stage}", summary=summary)
     notification = await send_admin_notification(bot=admin_bot, message_text=summary)
     if notification.admin_chat_id:
@@ -464,112 +424,7 @@ async def notify_sales(
     if notification.admin_message_id:
         esc.admin_message_id = notification.admin_message_id
     await session.flush()
-    return f"Уведомление продаж stage={stage} отправлено."
-
-
-class HandoffToAmirInput(BaseModel):
-    clinic_name: str | None = Field(default=None, description="Название клиники")
-    owner_contact: str = Field(description="Контакт собственника")
-    conversation_summary: str = Field(description="Краткое резюме разговора")
-    development_zone: str = Field(description="Зона интереса: data_privacy, general_ai_interest, hesitating, post_purchase")
-
-
-@tool(args_schema=HandoffToAmirInput)
-async def handoff_to_amir(
-    clinic_name: str | None,
-    owner_contact: str,
-    conversation_summary: str,
-    development_zone: str,
-    config: RunnableConfig = None,
-) -> str:
-    """Передать собственника коллеге Амиру для консультации по AI-инструментам.
-    Использовать когда: собственник копает в безопасность данных, интересуется другими AI-продуктами, колеблется."""
-    session = _get_session(config)
-    user = _get_user(config)
-    admin_bot = _get_admin_bot(config)
-
-    summary = f"Amir handoff\n\nStage: handoff\nClinic: {clinic_name or '-'}\nContact: {owner_contact}\nZone: {development_zone}\n{conversation_summary}"
-    esc = await EscalationRepository(session).create(user_id=user.id, reason="handoff_to_amir", summary=summary)
-    notification = await send_admin_notification(bot=admin_bot, message_text=summary)
-    if notification.admin_chat_id:
-        esc.admin_chat_id = notification.admin_chat_id
-    if notification.admin_message_id:
-        esc.admin_message_id = notification.admin_message_id
-    await session.flush()
-    return f"Собственник передан Амиру (development_zone={development_zone}). Сообщи собственнику: «Амир — мой коллега — подскажет, какие из наших AI-инструментов будут вам полезны. Бесплатно: {AMIR_BOT}»"
-
-
-class ScheduleFollowupInput(BaseModel):
-    owner_contact: str = Field(description="Контакт собственника")
-    when_iso: str = Field(description="Дата и время возврата в ISO формате YYYY-MM-DDTHH:MM:SS+TZ")
-    context_summary: str = Field(description="О чём говорили, что нужно продолжить")
-    timezone: str = Field(default=DEFAULT_TIMEZONE, description="Часовой пояс")
-
-
-@tool(args_schema=ScheduleFollowupInput)
-async def schedule_followup(
-    owner_contact: str,
-    when_iso: str,
-    context_summary: str,
-    timezone: str = DEFAULT_TIMEZONE,
-    config: RunnableConfig = None,
-) -> str:
-    """Запланировать возврат к разговору в согласованное время. Только ОДИН возврат.
-    Если собственник не ответит — вызвать notify_sales(stage='cold_lead')."""
-    session = _get_session(config)
-    user = _get_user(config)
-    admin_bot = _get_admin_bot(config)
-
-    summary = f"Sales follow-up\n\nStage: followup\nContact: {owner_contact}\nWhen: {when_iso}\nTimezone: {timezone}\nContext: {context_summary}"
-    await EscalationRepository(session).create(user_id=user.id, reason="sales_followup", summary=summary)
-    await send_admin_notification(bot=admin_bot, message_text=summary)
-    await session.flush()
-    return f"Возврат к разговору запланирован на {when_iso} ({timezone}). Подтверди собственнику время и не пиши больше до этого момента."
-
-
-class SendInvoiceInput(BaseModel):
-    owner_name: str = Field(description="Имя собственника")
-    clinic_name: str = Field(description="Название клиники")
-    phone: str = Field(description="Номер телефона собственника")
-    amount: str = Field(description="Сумма в долларах, например $200/мес")
-    locations: int = Field(default=1, description="Количество локаций")
-
-
-@tool(args_schema=SendInvoiceInput)
-async def send_invoice(
-    owner_name: str,
-    clinic_name: str,
-    phone: str,
-    amount: str,
-    locations: int = 1,
-    config: RunnableConfig = None,
-) -> str:
-    """Отправить счёт на оплату собственнику клиники. Вызывать после закрытия сделки (stage='hot').
-    Сейчас плейсхолдер — создаёт escalation для ручной отправки счёта."""
-    session = _get_session(config)
-    user = _get_user(config)
-    admin_bot = _get_admin_bot(config)
-
-    summary = (
-        f"INVOICE REQUEST\n\n"
-        f"Owner: {owner_name}\n"
-        f"Clinic: {clinic_name}\n"
-        f"Phone: {phone}\n"
-        f"Amount: {amount}\n"
-        f"Locations: {locations}\n"
-        f"Contact: @{user.telegram_username} / id {user.telegram_user_id}"
-    )
-    esc = await EscalationRepository(session).create(user_id=user.id, reason="invoice_request", summary=summary)
-    notification = await send_admin_notification(bot=admin_bot, message_text=summary)
-    if notification.admin_chat_id:
-        esc.admin_chat_id = notification.admin_chat_id
-    if notification.admin_message_id:
-        esc.admin_message_id = notification.admin_message_id
-    await session.flush()
-    return (
-        f"Заявка на счёт создана. Иван ({SHEVTSOV_TG}, {SHEVTSOV_PHONE}) свяжется с {owner_name} "
-        f"в течение часа для отправки реквизитов на оплату {amount}."
-    )
+    return f"Оповещение stage={stage} отправлено администраторам."
 
 
 # ──────────────────── Helpers ────────────────────
@@ -593,11 +448,6 @@ ALL_TOOLS = [
     update_appointment,
     cancel_appointment,
     view_appointments,
-    order_taxi,
-    order_pharmacy,
     escalate_to_admin,
     notify_sales,
-    handoff_to_amir,
-    schedule_followup,
-    send_invoice,
 ]
