@@ -402,7 +402,10 @@ async def _run_graph_for_message(
                 limit=10,
                 exclude_message_id=db_incoming_message.id,
             )
-            previous_text_in = [m for m in recent if m.direction == "in" and m.message_type == "text"]
+            previous_text_in = [
+                m for m in recent
+                if m.direction == "in" and m.message_type == "text"
+            ]
             if not previous_text_in:
                 outgoing = [m for m in recent if m.direction == "out" and m.text]
                 if outgoing:
@@ -437,7 +440,10 @@ async def _run_graph_for_message(
         )
     except Exception:
         logger.exception("agent_failed", extra={"trace_id": trace_id})
-        user_info = f"user={db_user.telegram_user_id} (@{getattr(db_user, 'telegram_username', '-') or '-'})"
+        user_info = (
+            f"user={db_user.telegram_user_id}"
+            f" (@{getattr(db_user, 'telegram_username', '-') or '-'})"
+        )
         await notify_dev_admin(
             bot=message.bot,
             error="Agent execution failed",

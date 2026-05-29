@@ -84,12 +84,15 @@ async def notify_dev_admin(
 
     full_traceback = traceback_module.format_exc()
     if full_traceback and full_traceback != "NoneType: None\n":
-        error_msg = f"{header}\n\n{error}\n\n```\n{full_traceback[-3500:]}\n```\n\n_{now}_"
+        tb_snippet = full_traceback[-3500:]
+        error_msg = f"{header}\n\n{error}\n\n```\n{tb_snippet}\n```\n\n_{now}_"
     else:
         error_msg = f"{header}\n\n{error}\n\n_{now}_"
 
     try:
-        await bot.send_message(chat_id=dev_chat_id, text=error_msg[:4000], parse_mode="Markdown")
+        await bot.send_message(
+            chat_id=dev_chat_id, text=error_msg[:4000], parse_mode="Markdown"
+        )
     except TelegramAPIError as exc:
         logger.exception(
             "dev_admin_notification_failed",
