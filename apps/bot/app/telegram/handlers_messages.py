@@ -11,7 +11,8 @@ from app.config import get_settings
 from app.db.models import Conversation, User
 from app.db.models import Message as DbMessage
 from app.db.repositories import MessageRepository
-from app.graph import GraphResult, run_bot_graph
+from app.agent import run_agent
+from app.graph import GraphResult
 from app.graph.state import InputType
 from app.speech import create_speech_providers
 from app.speech.base import SpeechProviderError
@@ -368,30 +369,49 @@ async def _run_graph_for_message(
     input_type: InputType,
     language: str,
 ) -> GraphResult:
-    telegram_user = message.from_user
-    result = await run_bot_graph(
-        session=db_session,
-        user=db_user,
-        conversation=db_conversation,
-        trace_id=trace_id,
-        telegram_chat_id=message.chat.id,
-        input_text=input_text,
-        input_type=input_type,
-        preferred_language=normalize_language(language),
-        telegram_profile=telegram_user.model_dump(mode="json") if telegram_user else {},
-        input_message_id=db_incoming_message.id,
-        admin_bot=message.bot,
-    )
-    logger.info(
-        "graph_execution",
-        extra={
-            "trace_id": trace_id,
-            "input": input_text,
-            "intent": result.intent,
-            "output": result.final_response_text,
-        },
-    )
-    return result
+    try:
+        config = {
+            "configurable": {
+                "session": db_session,
+                "user": db_user,
+                "conversation": db_conversation,
+                "language": language,
+                "admin_bot": message.bot,
+                "thread_id": str(message.chat.id),
+            }
+        }
+        response_text = await run_agent(
+            input_text=input_text,
+            config=config,
+        )
+        logger.info(
+            "agent_execution",
+            extra={
+                "trace_id": trace_id,
+                "input": input_text,
+                "output": response_text,
+            },
+        )
+        return GraphResult(
+            final_response_text=response_text,
+            intent=None,
+            safety_status=None,
+            should_generate_voice=input_type == "voice",
+            should_escalate=False,
+            proposed_slots=[],
+            metadata={},
+        )
+    except Exception:
+        logger.exception("agent_failed", extra={"trace_id": trace_id})
+        return GraphResult(
+            final_response_text="Извините, произошла ошибка. Попробуйте ещё раз.",
+            intent=None,
+            safety_status=None,
+            should_generate_voice=input_type == "voice",
+            should_escalate=False,
+            proposed_slots=[],
+            metadata={},
+        )
 
 
 async def _send_and_save_text(

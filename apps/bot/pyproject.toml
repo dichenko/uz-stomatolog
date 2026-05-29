@@ -17,7 +17,10 @@ dependencies = [
     "google-auth>=2.33,<3",
     "httpx>=0.27,<1",
     "itsdangerous>=2.2,<3",
-    "langchain-core>=0.2,<1",
+    "langchain>=0.3,<1",
+    "langchain-anthropic>=0.2,<1",
+    "langchain-core>=0.3,<1",
+    "langchain-openai>=0.2,<1",
     "langgraph>=0.2,<1",
     "langsmith>=0.1,<1",
     "openai>=1.40,<2",
@@ -59,3 +62,4 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/admin/routes.py" = ["E501"]
+"app/agent/*.py" = ["E501"]
