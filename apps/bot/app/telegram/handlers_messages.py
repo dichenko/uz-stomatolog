@@ -15,6 +15,7 @@ from app.db.models import Message as DbMessage
 from app.db.repositories import MessageRepository
 from app.graph import GraphResult
 from app.graph.state import InputType
+from app.services.admin_notify import notify_dev_admin
 from app.speech import create_speech_providers
 from app.speech.base import SpeechProviderError
 from app.speech.temp_files import (
@@ -313,6 +314,12 @@ async def voice_handler(
                 "voice_tts_generation_failed",
                 extra={"trace_id": trace_id, "language": language},
             )
+            await notify_dev_admin(
+                bot=message.bot,
+                error="Voice TTS generation failed",
+                trace_id=trace_id,
+                user_info=f"user={db_user.telegram_user_id}",
+            )
             await _send_and_save_text(
                 message=message,
                 db_session=db_session,
@@ -339,6 +346,12 @@ async def voice_handler(
         logger.exception(
             "voice_transcription_failed",
             extra={"trace_id": trace_id, "language": language},
+        )
+        await notify_dev_admin(
+            bot=message.bot,
+            error="Voice transcription failed",
+            trace_id=trace_id,
+            user_info=f"user={db_user.telegram_user_id}",
         )
         await _send_and_save_text(
             message=message,
@@ -424,6 +437,13 @@ async def _run_graph_for_message(
         )
     except Exception:
         logger.exception("agent_failed", extra={"trace_id": trace_id})
+        user_info = f"user={db_user.telegram_user_id} (@{getattr(db_user, 'telegram_username', '-') or '-'})"
+        await notify_dev_admin(
+            bot=message.bot,
+            error="Agent execution failed",
+            trace_id=trace_id,
+            user_info=user_info,
+        )
         return GraphResult(
             final_response_text="Извините, произошла ошибка. Попробуйте ещё раз.",
             intent=None,

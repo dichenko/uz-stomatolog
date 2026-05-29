@@ -11,6 +11,17 @@ from app.db.repositories import (
     MessageRepository,
     UserRepository,
 )
+from app.services.admin_notify import notify_dev_admin
+
+
+def _extract_user_info(event: TelegramObject, data: dict[str, Any]) -> str:
+    tg_user = getattr(event, "from_user", None)
+    if tg_user is None:
+        db_user = data.get("db_user")
+        if db_user:
+            return f"user={db_user.telegram_user_id}"
+        return ""
+    return f"user={tg_user.id} (@{tg_user.username or '-'})"
 
 
 class PersistenceMiddleware(BaseMiddleware):
@@ -35,6 +46,13 @@ class PersistenceMiddleware(BaseMiddleware):
                 return result
             except Exception:
                 await session.rollback()
+                user_info = _extract_user_info(event, data)
+                await notify_dev_admin(
+                    bot=getattr(event, "bot", None),
+                    error=f"Handler error: {type(Exception).__name__}",
+                    trace_id=trace_id,
+                    user_info=user_info,
+                )
                 raise
 
     async def _persist_incoming(

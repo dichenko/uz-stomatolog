@@ -1,4 +1,5 @@
 import logging
+import traceback as traceback_module
 from dataclasses import dataclass
 from typing import Any
 
@@ -56,3 +57,41 @@ async def send_admin_notification(
         admin_chat_id=admin_chat_id,
         admin_message_id=message_id,
     )
+
+
+async def notify_dev_admin(
+    *,
+    bot: Any | None,
+    error: str,
+    trace_id: str | None = None,
+    user_info: str = "",
+    settings: Settings | None = None,
+) -> None:
+    """Send error notification to DEV_ADMIN_TG_ID."""
+    resolved_settings = settings or get_settings()
+    dev_chat_id = resolved_settings.dev_admin_tg_id
+    if bot is None or not dev_chat_id:
+        return
+
+    import datetime
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    header = "⚠️ BOT ERROR"
+    if trace_id:
+        header += f" | trace={trace_id}"
+    if user_info:
+        header += f" | {user_info}"
+
+    full_traceback = traceback_module.format_exc()
+    if full_traceback and full_traceback != "NoneType: None\n":
+        error_msg = f"{header}\n\n{error}\n\n```\n{full_traceback[-3500:]}\n```\n\n_{now}_"
+    else:
+        error_msg = f"{header}\n\n{error}\n\n_{now}_"
+
+    try:
+        await bot.send_message(chat_id=dev_chat_id, text=error_msg[:4000], parse_mode="Markdown")
+    except TelegramAPIError as exc:
+        logger.exception(
+            "dev_admin_notification_failed",
+            extra={"dev_chat_id": dev_chat_id, "error": str(exc)},
+        )
