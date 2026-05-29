@@ -75,6 +75,8 @@ async def fallback_text_handler(
         language=language,
     )
     response_text = graph_result.final_response_text
+    if not isinstance(response_text, str) or not response_text.strip():
+        response_text = "Извините, произошла ошибка. Попробуйте ещё раз."
     reply_markup = _reply_markup_for_graph_result(graph_result, language)
     sent = await message.answer(response_text, reply_markup=reply_markup)
     await save_outgoing_message(
@@ -130,9 +132,12 @@ async def contact_handler(
         input_type="text",
         language=language,
     )
+    response_text = graph_result.final_response_text
+    if not isinstance(response_text, str) or not response_text.strip():
+        response_text = "Извините, произошла ошибка. Попробуйте ещё раз."
     reply_markup = _reply_markup_for_graph_result(graph_result, language)
     sent = await message.answer(
-        graph_result.final_response_text,
+        response_text,
         reply_markup=reply_markup,
     )
     await save_outgoing_message(
@@ -255,6 +260,8 @@ async def voice_handler(
             language=language,
         )
         response_text = graph_result.final_response_text
+        if not isinstance(response_text, str) or not response_text.strip():
+            response_text = "Извините, произошла ошибка. Попробуйте ещё раз."
         reply_markup = _reply_markup_for_graph_result(graph_result, language)
         sent = await message.answer(response_text, reply_markup=reply_markup)
         await save_outgoing_message(
@@ -283,7 +290,7 @@ async def voice_handler(
                 pass
 
             tts_result = await providers.tts_for_language(language).synthesize(
-                graph_result.final_response_text,
+                response_text,
                 language,
                 instructions=tts_instructions.strip() or None,
             )
@@ -297,7 +304,7 @@ async def voice_handler(
                 user=db_user,
                 conversation=db_conversation,
                 telegram_message_id=sent_audio.message_id,
-                text=graph_result.final_response_text,
+                text=response_text,
                 language=language,
                 trace_id=trace_id,
                 message_type="voice",
