@@ -26,6 +26,11 @@ async def start_handler(
     db_conversation: Conversation,
     trace_id: str,
 ) -> None:
+    await reset_user_dialog_history(
+        session=db_session,
+        user=db_user,
+        conversation=db_conversation,
+    )
     language = normalize_language(db_user.preferred_language)
     response_text = text("choose_language", language)
     sent = await message.answer(response_text, reply_markup=language_keyboard())

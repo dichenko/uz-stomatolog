@@ -62,4 +62,5 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/admin/routes.py" = ["E501"]
+"app/admin/settings_repository.py" = ["E501"]
 "app/agent/*.py" = ["E501"]

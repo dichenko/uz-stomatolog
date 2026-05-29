@@ -7,7 +7,7 @@ from aiogram.types import FSInputFile, Message
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.admin.settings_reader import get_tts_prompt
+from app.admin.settings_reader import get_system_prompt, get_tts_prompt
 from app.agent import run_agent
 from app.config import get_settings
 from app.db.models import Conversation, User
@@ -427,6 +427,7 @@ async def _run_graph_for_message(
             input_text=input_text,
             config=config,
             chat_history=chat_history,
+            system_prompt=await get_system_prompt(db_session),
         )
         logger.info(
             "agent_execution",
