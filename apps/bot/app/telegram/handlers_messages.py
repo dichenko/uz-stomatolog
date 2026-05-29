@@ -4,7 +4,7 @@ from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.types import FSInputFile, Message
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.settings_reader import get_tts_prompt
@@ -403,25 +403,25 @@ async def _run_graph_for_message(
         }
 
         chat_history = None
-        if input_type == "text":
-            recent = await MessageRepository(db_session).get_recent_for_conversation(
-                conversation_id=db_conversation.id,
-                limit=10,
-                exclude_message_id=db_incoming_message.id,
-            )
-            previous_text_in = [
-                m for m in recent
-                if m.direction == "in" and m.message_type == "text"
-            ]
-            if not previous_text_in:
-                outgoing = [m for m in recent if m.direction == "out" and m.text]
-                if outgoing:
-                    greeting = outgoing[-1]
-                    chat_history = [AIMessage(content=greeting.text)]
-                    logger.info(
-                        "injecting_greeting_to_chat_history",
-                        extra={"trace_id": trace_id, "greeting_id": greeting.id},
-                    )
+        recent = await MessageRepository(db_session).get_recent_for_conversation(
+            conversation_id=db_conversation.id,
+            limit=32,
+            exclude_message_id=db_incoming_message.id,
+        )
+        if recent:
+            chat_history = []
+            for m in recent:
+                if not m.text:
+                    continue
+                if m.direction == "in":
+                    chat_history.append(HumanMessage(content=m.text))
+                elif m.direction == "out":
+                    chat_history.append(AIMessage(content=m.text))
+            if chat_history:
+                logger.info(
+                    "injecting_chat_history",
+                    extra={"trace_id": trace_id, "history_messages": len(chat_history)},
+                )
 
         response_text = await run_agent(
             input_text=input_text,
