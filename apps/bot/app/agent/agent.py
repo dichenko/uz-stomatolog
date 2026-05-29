@@ -79,7 +79,16 @@ async def run_agent(
         config=config,
     )
     last_message = result["messages"][-1]
-    return last_message.content if hasattr(last_message, "content") else str(last_message)
+    content = last_message.content if hasattr(last_message, "content") else str(last_message)
+    if isinstance(content, list):
+        content = "\n".join(
+            c.get("text", "") if isinstance(c, dict) else str(c)
+            for c in content
+            if c
+        )
+    if isinstance(content, str):
+        return content.strip() or "Извините, произошла ошибка. Попробуйте ещё раз."
+    return str(content)
 
 
 # ──────────────────── System Prompt ────────────────────
