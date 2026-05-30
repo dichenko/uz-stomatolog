@@ -58,7 +58,6 @@ def create_agent(settings: Settings | None = None):
     _agent = create_react_agent(
         model=llm,
         tools=ALL_TOOLS,
-        prompt="",  # system prompt is injected dynamically at runtime
     )
     _agent_settings_hash = new_hash
     return _agent
@@ -73,9 +72,9 @@ async def run_agent(
 ) -> str:
     agent = create_agent()
     messages = [SystemMessage(content=system_prompt)] if system_prompt.strip() else []
-    messages.append(HumanMessage(content=input_text))
     if chat_history:
-        messages = list(chat_history) + messages[1:] if messages else list(chat_history) + [messages[-1]]
+        messages = list(chat_history) + messages
+    messages.append(HumanMessage(content=input_text))
     result = await agent.ainvoke(
         {"messages": messages},
         config=config,
