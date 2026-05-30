@@ -71,7 +71,18 @@ async def run_agent(
     system_prompt: str = "",
 ) -> str:
     agent = create_agent()
-    messages = [SystemMessage(content=system_prompt)] if system_prompt.strip() else []
+    _settings = get_settings()
+    messages = []
+    if system_prompt.strip():
+        if _settings.text_llm_provider == "claude":
+            system_content = [{
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }]
+        else:
+            system_content = system_prompt
+        messages = [SystemMessage(content=system_content)]
     if chat_history:
         messages = list(chat_history) + messages
     messages.append(HumanMessage(content=input_text))

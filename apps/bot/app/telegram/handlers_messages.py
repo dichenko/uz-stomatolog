@@ -405,7 +405,7 @@ async def _run_graph_for_message(
         chat_history = None
         recent = await MessageRepository(db_session).get_recent_for_conversation(
             conversation_id=db_conversation.id,
-            limit=32,
+            limit=15,
             exclude_message_id=db_incoming_message.id,
         )
         if recent:
