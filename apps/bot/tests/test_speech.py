@@ -6,6 +6,7 @@ import pytest
 
 from app.config import Settings
 from app.speech import MockSpeechProvider, create_speech_providers
+from app.speech.aisha_provider import AishaTtsProvider
 from app.speech.azure_provider import AzureSpeechProvider, AzureSpeechStatusError
 from app.speech.base import SpeechProviderError
 from app.speech.openai_provider import OpenAISpeechProvider
@@ -24,7 +25,7 @@ def test_speech_factory_routes_languages_to_expected_providers():
     providers = create_speech_providers(Settings())
 
     assert providers.stt_for_language("uz") is providers.muxlisa
-    assert providers.tts_for_language("uz") is providers.muxlisa
+    assert providers.tts_for_language("uz") is providers.aisha
     assert providers.stt_for_language("ru") is providers.openai
     assert providers.tts_for_language("ru") is providers.yandex
     assert providers.stt_for_language("en") is providers.openai
@@ -85,6 +86,169 @@ async def test_openai_tts_rejects_too_long_text_before_api_call():
 
     with pytest.raises(SpeechProviderError):
         await provider.synthesize("too long", "en")
+
+
+async def test_aisha_tts_posts_form_and_downloads_audio(monkeypatch):
+    test_dir = _make_test_dir()
+    calls = []
+
+    class FakeResponse:
+        def __init__(
+            self,
+            *,
+            status_code,
+            headers=None,
+            content=b"",
+            text="",
+            json_payload=None,
+        ):
+            self.status_code = status_code
+            self.headers = headers or {}
+            self.content = content
+            self.text = text
+            self._json_payload = json_payload
+
+        def json(self):
+            if self._json_payload is None:
+                raise ValueError("no json")
+            return self._json_payload
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, *, headers, files):
+            calls.append(
+                {
+                    "method": "POST",
+                    "url": url,
+                    "headers": headers,
+                    "files": files,
+                    "timeout": self.timeout,
+                }
+            )
+            return FakeResponse(
+                status_code=201,
+                headers={"content-type": "application/json"},
+                json_payload={"audio_path": "/media/tts_audios/test.wav"},
+            )
+
+        async def get(self, url, *, headers):
+            calls.append({"method": "GET", "url": url, "headers": headers})
+            return FakeResponse(
+                status_code=200,
+                headers={"content-type": "audio/wav"},
+                content=b"wav-bytes",
+            )
+
+    monkeypatch.setattr(
+        "app.speech.aisha_provider.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+
+    provider = AishaTtsProvider(
+        Settings(
+            speech_temp_dir=str(test_dir),
+            aisha_api_key="test-key",
+            aisha_tts_timeout_ms=12000,
+            aisha_tts_model="Gulnoza",
+            aisha_tts_mood="Neutral",
+            aisha_tts_speed=1.2,
+        )
+    )
+    result = await provider.synthesize("**Salom** - test", "uz")
+
+    assert Path(result.file_path).read_bytes() == b"wav-bytes"
+    assert result.provider == "aisha"
+    assert result.mime_type == "audio/wav"
+    assert result.format == "wav"
+    assert result.voice == "Gulnoza"
+    assert calls == [
+        {
+            "method": "POST",
+            "url": "https://back.aisha.group/api/v1/tts/post/",
+            "headers": {"X-Api-Key": "test-key", "Accept-Language": "uz"},
+            "files": {
+                "transcript": (None, "Salom test"),
+                "language": (None, "uz"),
+                "model": (None, "Gulnoza"),
+                "mood": (None, "Neutral"),
+                "speed": (None, "1.2"),
+            },
+            "timeout": 12,
+        },
+        {
+            "method": "GET",
+            "url": "https://back.aisha.group/media/tts_audios/test.wav",
+            "headers": {"X-Api-Key": "test-key", "Accept-Language": "uz"},
+        },
+    ]
+
+    await cleanup_temp_file(result.file_path, reason="test_cleanup")
+    test_dir.rmdir()
+
+
+async def test_aisha_tts_requires_api_key():
+    provider = AishaTtsProvider(Settings())
+
+    with pytest.raises(SpeechProviderError, match="AISHA_API_KEY"):
+        await provider.synthesize("Salom", "uz")
+
+
+async def test_aisha_tts_logs_error_settings_without_api_key(monkeypatch, caplog):
+    class FakeResponse:
+        status_code = 402
+        headers = {"content-type": "application/json"}
+        text = '{"detail":"payment required"}'
+
+        def json(self):
+            return {"detail": "payment required"}
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, _url, *, headers, files):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "app.speech.aisha_provider.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+
+    provider = AishaTtsProvider(
+        Settings(
+            aisha_api_key="secret-key",
+            aisha_tts_model="Gulnoza",
+            aisha_tts_mood="Neutral",
+            aisha_tts_speed=1.0,
+        )
+    )
+
+    with caplog.at_level("ERROR", logger="app.speech.aisha_provider"):
+        with pytest.raises(SpeechProviderError):
+            await provider.synthesize("Salom", "uz")
+
+    record = next(item for item in caplog.records if item.message == "aisha_tts_failed")
+    assert record.status_code == 402
+    assert record.body == "{'detail': 'payment required'}"
+    assert record.language == "uz"
+    assert record.model == "Gulnoza"
+    assert record.mood == "Neutral"
+    assert record.speed == 1.0
+    assert "secret-key" not in caplog.text
 
 
 async def test_azure_tts_posts_ssml_to_speech_service(monkeypatch):

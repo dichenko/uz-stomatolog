@@ -88,6 +88,15 @@ class Settings(BaseSettings):
     muxlisa_tts_max_chars: int = 512
     muxlisa_tts_speaker: int = 0
 
+    aisha_api_key: SecretStr | None = None
+    aisha_base_url: str = "https://back.aisha.group"
+    aisha_tts_timeout_ms: int = 60000
+    aisha_tts_max_chars: int = 1000
+    aisha_tts_language: str = "uz"
+    aisha_tts_model: str = "Gulnoza"
+    aisha_tts_mood: str = "Neutral"
+    aisha_tts_speed: float = 1.0
+
     yandex_speechkit_api_key: SecretStr | None = None
     yandex_tts_base_url: str = "https://tts.api.cloud.yandex.net"
     yandex_tts_model: str = "yandex-speechkit-tts-v1"
