@@ -79,17 +79,13 @@ class Settings(BaseSettings):
     openai_tts_speed: float = 1.0
     openai_tts_instructions: str = ""
 
-    muxlisa_api_key: SecretStr | None = None
-    muxlisa_base_url: str | None = "https://service.muxlisa.uz"
-    muxlisa_stt_timeout_ms: int = 60000
-    muxlisa_tts_timeout_ms: int = 60000
-    muxlisa_max_audio_size_mb: int = 5
-    muxlisa_max_audio_duration_sec: int = 60
-    muxlisa_tts_max_chars: int = 512
-    muxlisa_tts_speaker: int = 0
-
     aisha_api_key: SecretStr | None = None
     aisha_base_url: str = "https://back.aisha.group"
+    aisha_stt_timeout_ms: int = 60000
+    aisha_stt_max_audio_size_mb: int = 25
+    aisha_stt_max_audio_duration_sec: int = 60
+    aisha_stt_language: str = "uz"
+    aisha_stt_has_diarization: bool = False
     aisha_tts_timeout_ms: int = 60000
     aisha_tts_max_chars: int = 1000
     aisha_tts_language: str = "uz"

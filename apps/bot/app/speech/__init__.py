@@ -1,4 +1,4 @@
-from app.speech.aisha_provider import AishaTtsProvider
+from app.speech.aisha_provider import AishaSpeechProvider, AishaTtsProvider
 from app.speech.azure_provider import AzureSpeechProvider
 from app.speech.base import (
     SpeechProviderError,
@@ -13,6 +13,7 @@ from app.speech.yandex_provider import YandexSpeechKitProvider
 
 __all__ = [
     "AzureSpeechProvider",
+    "AishaSpeechProvider",
     "AishaTtsProvider",
     "SpeechProviderError",
     "SpeechProviders",

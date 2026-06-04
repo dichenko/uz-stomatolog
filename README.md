@@ -153,10 +153,10 @@ CLAUDE_TEXT_MODEL=claude-sonnet-4-5-20250929
 Voice messages are handled through isolated speech providers:
 
 - Russian and English use OpenAI STT/TTS.
-- Uzbek uses Muxlisa STT/TTS.
+- Uzbek uses Aisha STT/TTS.
 - Tests can use `MockSpeechProvider` without external API keys.
 
-Temporary audio files are written to `SPEECH_TEMP_DIR` and deleted after transcription, TTS generation, and Telegram sending. OpenAI and Muxlisa API keys must stay in `.env`; they are never logged or sent to clients.
+Temporary audio files are written to `SPEECH_TEMP_DIR` and deleted after transcription, TTS generation, and Telegram sending. OpenAI and Aisha API keys must stay in `.env`; they are never logged or sent to clients.
 
 ## Debugging and Observability
 

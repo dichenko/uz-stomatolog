@@ -186,7 +186,7 @@ async def voice_handler(
     if message.voice is None:
         return
 
-    if message.voice.duration > settings.muxlisa_max_audio_duration_sec:
+    if message.voice.duration > settings.aisha_stt_max_audio_duration_sec:
         await _send_and_save_text(
             message=message,
             db_session=db_session,
@@ -208,7 +208,7 @@ async def voice_handler(
             raise SpeechProviderError("Telegram voice file path is empty")
         await message.bot.download_file(telegram_file.file_path, destination=input_path)
         max_size_mb = (
-            settings.muxlisa_max_audio_size_mb
+            settings.aisha_stt_max_audio_size_mb
             if language == "uz"
             else settings.openai_stt_max_audio_size_mb
         )

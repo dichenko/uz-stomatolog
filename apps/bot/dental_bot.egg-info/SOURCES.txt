@@ -56,7 +56,6 @@ app/speech/azure_provider.py
 app/speech/base.py
 app/speech/factory.py
 app/speech/mock_provider.py
-app/speech/muxlisa_provider.py
 app/speech/openai_provider.py
 app/speech/temp_files.py
 app/speech/yandex_provider.py
