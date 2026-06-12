@@ -29,6 +29,18 @@ from app.admin.history_repository import (
 )
 from app.admin.settings_repository import get_all_settings, get_setting, set_setting
 from app.config import get_settings
+from app.llm.manager import test_provider
+from app.llm.repository import (
+    LlmProviderConfigError,
+    ensure_llm_provider_defaults,
+    get_model_catalog,
+    get_provider_configs,
+    get_runtime_provider_config,
+    get_runtime_provider_configs,
+    serialize_provider_configs,
+    update_provider_configs,
+    update_provider_test_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +210,122 @@ async def api_settings(request: Request):
     await _require_admin(request)
     async with _get_db_session() as session:
         return await get_all_settings(session)
+
+
+@router.get("/api/llm-providers")
+async def api_llm_providers(request: Request):
+    await _require_admin(request)
+    async with _get_db_session() as session:
+        await ensure_llm_provider_defaults(session)
+        await session.commit()
+        configs = await get_provider_configs(session)
+        catalog = await get_model_catalog(session)
+        return serialize_provider_configs(configs, catalog)
+
+
+@router.put("/api/llm-providers")
+async def api_save_llm_providers(request: Request):
+    tg_id = await _require_admin(request)
+    body = await request.json()
+    updates = body.get("providers")
+    if not isinstance(updates, list):
+        raise HTTPException(status_code=400, detail="providers must be a list")
+    async with _get_db_session() as session:
+        try:
+            await ensure_llm_provider_defaults(session)
+            configs = await update_provider_configs(
+                session,
+                updates,
+                admin_tg_id=tg_id,
+            )
+            catalog = await get_model_catalog(session)
+            await log_audit(
+                session,
+                admin_tg_id=tg_id,
+                action="update_llm_provider_configs",
+                setting_key="llm.providers",
+                old_value=None,
+                new_value=_sanitize_llm_provider_updates(configs),
+                ip_address=request.client.host if request.client else None,
+            )
+            await session.commit()
+            return serialize_provider_configs(configs, catalog)
+        except LlmProviderConfigError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/llm-providers/{provider_code}/test")
+async def api_test_llm_provider(provider_code: str, request: Request):
+    await _require_admin(request)
+    async with _get_db_session() as session:
+        await ensure_llm_provider_defaults(session)
+        try:
+            runtime_config = await get_runtime_provider_config(session, provider_code)
+            response = await test_provider(runtime_config)
+            await update_provider_test_status(session, provider_code, ok=True)
+            await session.commit()
+            return {
+                "ok": True,
+                "providerCode": response.provider_code,
+                "modelId": response.model_id,
+                "text": response.text[:200],
+            }
+        except Exception as exc:
+            await update_provider_test_status(
+                session,
+                provider_code,
+                ok=False,
+                error_code=exc.__class__.__name__,
+                error_message=str(exc),
+            )
+            await session.commit()
+            return {
+                "ok": False,
+                "providerCode": provider_code,
+                "error": str(exc)[:500],
+            }
+
+
+@router.post("/api/llm-providers/test-chain")
+async def api_test_llm_provider_chain(request: Request):
+    await _require_admin(request)
+    results = []
+    async with _get_db_session() as session:
+        await ensure_llm_provider_defaults(session)
+        configs = await get_runtime_provider_configs(session)
+        for config in configs:
+            try:
+                response = await test_provider(config)
+                await update_provider_test_status(session, config.provider_code, ok=True)
+                results.append(
+                    {
+                        "ok": True,
+                        "providerCode": config.provider_code,
+                        "modelId": response.model_id,
+                        "priority": config.priority,
+                    }
+                )
+            except Exception as exc:
+                await update_provider_test_status(
+                    session,
+                    config.provider_code,
+                    ok=False,
+                    error_code=exc.__class__.__name__,
+                    error_message=str(exc),
+                )
+                results.append(
+                    {
+                        "ok": False,
+                        "providerCode": config.provider_code,
+                        "modelId": config.model_id,
+                        "priority": config.priority,
+                        "error": str(exc)[:500],
+                    }
+                )
+        await session.commit()
+    first_ok = next((item for item in results if item["ok"]), None)
+    return {"ok": bool(first_ok), "firstAvailable": first_ok, "results": results}
 
 
 @router.get("/api/history")
@@ -389,6 +517,12 @@ async def clinic_info_page(request: Request):
 # ── HTML rendering helpers ──────────────────────────────────────────
 
 
+@router.get("/llm-providers", response_class=HTMLResponse)
+async def llm_providers_page(request: Request):
+    await _require_admin(request)
+    return _render_llm_providers_page()
+
+
 @router.get("/history", response_class=HTMLResponse)
 async def history_page(request: Request):
     await _require_admin(request)
@@ -564,6 +698,174 @@ def _render_history_page() -> str:
     )
 
 
+def _render_llm_providers_page() -> str:
+    body = """
+    <main class="content content-wide">
+        <section class="history-panel">
+            <div class="history-header">
+                <h2>LLM Providers</h2>
+                <div class="llm-actions">
+                    <button type="button" class="btn-secondary" onclick="testChain()">Test full fallback chain</button>
+                    <button type="button" class="btn-save" onclick="saveProviders()">Save changes</button>
+                </div>
+            </div>
+            <div id="llm-message" class="msg"></div>
+            <div class="llm-table-wrap">
+                <table class="llm-table">
+                    <thead>
+                        <tr>
+                            <th>Provider</th>
+                            <th>Enabled</th>
+                            <th>Priority</th>
+                            <th>Model</th>
+                            <th>New API key</th>
+                            <th>Saved key</th>
+                            <th>Status</th>
+                            <th>Last tested</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="llm-provider-rows"></tbody>
+                </table>
+            </div>
+            <pre id="llm-test-output" class="llm-output"></pre>
+        </section>
+    </main>
+    <script>
+    let llmProviders = [];
+
+    function showMessage(text, ok = true) {
+        const el = document.getElementById('llm-message');
+        el.className = ok ? 'msg toast toast-success' : 'msg toast toast-error';
+        el.textContent = text;
+    }
+
+    async function loadProviders() {
+        const response = await fetch('/admin/api/llm-providers');
+        if (!response.ok) {
+            showMessage('Load failed: ' + response.status, false);
+            return;
+        }
+        const data = await response.json();
+        llmProviders = data.providers || [];
+        renderProviders();
+    }
+
+    function renderProviders() {
+        const tbody = document.getElementById('llm-provider-rows');
+        tbody.innerHTML = '';
+        llmProviders.forEach((provider, index) => {
+            const tr = document.createElement('tr');
+            const models = (provider.models || []).map(model => {
+                const selected = model.modelId === provider.selectedModelId ? 'selected' : '';
+                const note = model.availabilityNote ? ' [' + model.availabilityNote + ']' : '';
+                return `<option value="${escapeHtml(model.modelId)}" ${selected}>${escapeHtml(model.displayName)} - ${escapeHtml(model.modelId)}${escapeHtml(note)}</option>`;
+            }).join('');
+            tr.innerHTML = `
+                <td><strong>${escapeHtml(provider.displayName)}</strong><br><small>${escapeHtml(provider.providerCode)}</small></td>
+                <td><input type="checkbox" data-index="${index}" data-field="enabled" ${provider.enabled ? 'checked' : ''}></td>
+                <td>
+                    <select data-index="${index}" data-field="priority">
+                        <option value="">-</option>
+                        <option value="1" ${provider.priority === 1 ? 'selected' : ''}>1</option>
+                        <option value="2" ${provider.priority === 2 ? 'selected' : ''}>2</option>
+                        <option value="3" ${provider.priority === 3 ? 'selected' : ''}>3</option>
+                    </select>
+                </td>
+                <td><select data-index="${index}" data-field="selectedModelId">${models}</select></td>
+                <td><input type="password" autocomplete="new-password" data-index="${index}" data-field="apiKey" placeholder="Replace key"></td>
+                <td>${provider.apiKeyMasked ? escapeHtml(provider.apiKeyMasked) : '<span class="muted">not set</span>'}</td>
+                <td><span class="status status-${escapeHtml(provider.lastStatus || 'unknown')}">${escapeHtml(provider.lastStatus || 'unknown')}</span>${provider.lastErrorMessage ? '<br><small>' + escapeHtml(provider.lastErrorMessage) + '</small>' : ''}</td>
+                <td>${provider.lastTestedAt ? escapeHtml(provider.lastTestedAt) : '<span class="muted">never</span>'}</td>
+                <td><button type="button" class="btn-secondary" onclick="testProvider('${escapeHtml(provider.providerCode)}')">Test</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('change', () => updateProviderField(el));
+            el.addEventListener('input', () => {
+                if (el.dataset.field === 'apiKey') updateProviderField(el);
+            });
+        });
+    }
+
+    function updateProviderField(el) {
+        const index = Number(el.dataset.index);
+        const field = el.dataset.field;
+        if (field === 'enabled') {
+            llmProviders[index][field] = el.checked;
+            return;
+        }
+        if (field === 'priority') {
+            const priority = el.value ? Number(el.value) : null;
+            if (priority) {
+                const other = llmProviders.find((p, i) => i !== index && p.enabled && p.priority === priority);
+                if (other) other.priority = llmProviders[index].priority;
+            }
+            llmProviders[index][field] = priority;
+            renderProviders();
+            return;
+        }
+        llmProviders[index][field] = el.value;
+    }
+
+    async function saveProviders() {
+        const payload = {
+            providers: llmProviders.map(provider => ({
+                providerCode: provider.providerCode,
+                enabled: provider.enabled,
+                priority: provider.priority,
+                selectedModelId: provider.selectedModelId,
+                apiKey: provider.apiKey || '',
+            }))
+        };
+        const response = await fetch('/admin/api/llm-providers', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showMessage(data.detail || ('Save failed: ' + response.status), false);
+            return;
+        }
+        llmProviders = data.providers || [];
+        renderProviders();
+        showMessage('Saved');
+    }
+
+    async function testProvider(providerCode) {
+        const response = await fetch('/admin/api/llm-providers/' + providerCode + '/test', {method: 'POST'});
+        const data = await response.json();
+        document.getElementById('llm-test-output').textContent = JSON.stringify(data, null, 2);
+        showMessage(data.ok ? 'Provider test passed' : 'Provider test failed', data.ok);
+        await loadProviders();
+    }
+
+    async function testChain() {
+        const response = await fetch('/admin/api/llm-providers/test-chain', {method: 'POST'});
+        const data = await response.json();
+        document.getElementById('llm-test-output').textContent = JSON.stringify(data, null, 2);
+        showMessage(data.ok ? 'Fallback chain has an available provider' : 'Fallback chain failed', data.ok);
+        await loadProviders();
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;',
+        })[ch]);
+    }
+
+    loadProviders();
+    </script>
+    """
+    return _base_html(title="LLM Providers", body=body, is_page=True)
+
+
 def _render_page(
     title: str,
     endpoint: str,
@@ -668,6 +970,7 @@ def _base_html(
             <a href="/admin/welcome-messages">Первое сообщение</a>
             <a href="/admin/tts-prompts">Промпты TTS</a>
             <a href="/admin/clinic-info">Справка о клинике</a>
+            <a href="/admin/llm-providers">LLM Providers</a>
             <a href="/admin/history">История</a>
             <span class="nav-spacer"></span>
             <form action="/admin/auth/logout" method="POST">
@@ -952,6 +1255,71 @@ def _base_html(
     font-size: 13px;
   }}
 
+  .llm-actions {{
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }}
+  .llm-table-wrap {{
+    width: 100%;
+    overflow-x: auto;
+  }}
+  .llm-table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }}
+  .llm-table th,
+  .llm-table td {{
+    border-bottom: 1px solid var(--border);
+    padding: 10px 8px;
+    text-align: left;
+    vertical-align: top;
+  }}
+  .llm-table input[type="password"],
+  .llm-table select {{
+    min-width: 150px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: 13px;
+  }}
+  .llm-table select[data-field="selectedModelId"] {{
+    min-width: 260px;
+  }}
+  .muted {{
+    color: var(--text-secondary);
+  }}
+  .status {{
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 12px;
+    font-weight: 600;
+  }}
+  .status-ok {{
+    background: #d1fae5;
+    color: #065f46;
+  }}
+  .status-failed {{
+    background: #fee2e2;
+    color: #991b1b;
+  }}
+  .llm-output {{
+    margin-top: 18px;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    background: #111827;
+    color: #f9fafb;
+    min-height: 64px;
+    max-height: 260px;
+    overflow: auto;
+    font-size: 12px;
+  }}
+
   @media (max-width: 640px) {{
     nav {{ padding: 0 16px; gap: 2px; }}
     nav a {{ font-size: 12px; padding: 6px 10px; }}
@@ -978,6 +1346,22 @@ def _js_escape(text: str) -> str:
         .replace("\r", "")
         .replace("</", "<\\/")
     )
+
+
+def _sanitize_llm_provider_updates(configs) -> dict[str, Any]:
+    return {
+        "providers": [
+            {
+                "providerCode": config.provider_code,
+                "enabled": config.enabled,
+                "priority": config.priority,
+                "selectedModelId": config.selected_model_id,
+                "hasApiKey": bool(config.api_key_encrypted),
+                "apiKeyMasked": config.api_key_masked,
+            }
+            for config in configs
+        ]
+    }
 
 
 def _parse_int(value: str | None, *, default: int) -> int:

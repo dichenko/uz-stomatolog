@@ -14,6 +14,7 @@ from app.admin import admin_router
 from app.admin.auth import SESSION_KEY_TG_ID, is_admin
 from app.config import get_settings
 from app.db.session import async_session_factory
+from app.llm.repository import ensure_llm_provider_defaults
 from app.logging import configure_logging
 from app.services.clinic_knowledge import load_clinic_knowledge_if_empty
 from app.telegram.webhook import (
@@ -44,6 +45,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
     )
     try:
         async with async_session_factory() as session:
+            await ensure_llm_provider_defaults(session, settings=settings)
             loaded_knowledge_count = await load_clinic_knowledge_if_empty(session)
             await session.commit()
             if loaded_knowledge_count:

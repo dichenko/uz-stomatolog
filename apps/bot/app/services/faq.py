@@ -214,6 +214,8 @@ async def generate_admin_faq_answer(
         knowledge=knowledge,
         session=session,
         llm_context=llm_context,
+        telegram_user_id=user.telegram_user_id if user is not None else None,
+        input_message_id=input_message_id,
     )
     if llm_answer is not None:
         return FaqAnswer(text=llm_answer, answered=True, source="llm")
@@ -248,6 +250,8 @@ async def _try_openai_answer(
     knowledge: str,
     session: AsyncSession | None = None,
     llm_context: LlmContext | None = None,
+    telegram_user_id: int | None = None,
+    input_message_id: int | None = None,
 ) -> str | None:
     system_prompt = ""
     if session is not None:
@@ -292,6 +296,9 @@ async def _try_openai_answer(
         return await complete_text(
             temperature=0,
             messages=messages,
+            session=session,
+            request_id=str(input_message_id) if input_message_id else None,
+            telegram_user_id=telegram_user_id,
         )
     except Exception:
         logger.exception("faq_llm_generation_failed")

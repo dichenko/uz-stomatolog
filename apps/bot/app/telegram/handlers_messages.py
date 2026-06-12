@@ -399,6 +399,7 @@ async def _run_graph_for_message(
                 "language": language,
                 "admin_bot": message.bot,
                 "thread_id": str(message.chat.id),
+                "trace_id": trace_id,
             }
         }
 

@@ -1,75 +1,34 @@
-"""LangChain ReAct Agent — Madina VoiceFlow v1.2."""
+"""LangChain ReAct agent for Madina VoiceFlow."""
 
 import logging
+from typing import Any
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools import ALL_TOOLS
 from app.config import Settings, get_settings
+from app.llm.manager import (
+    SAFE_LLM_ERROR_MESSAGE,
+    build_chat_model,
+    flatten_message_content,
+    run_agent_with_fallback,
+)
+from app.llm.repository import RuntimeProviderConfig
 
 logger = logging.getLogger(__name__)
 
-_agent = None
-_agent_settings_hash: int | None = None
-
-
-def _settings_hash(settings: Settings) -> int:
-    return hash((
-        settings.text_llm_provider,
-        settings.openai_text_model,
-        settings.claude_text_model,
-        settings.claude_base_url,
-    ))
-
-
-def _openai_model_kwargs(settings: Settings) -> dict[str, object]:
-    kwargs: dict[str, object] = {
-        "model": settings.openai_text_model,
-        "api_key": (
-            settings.openai_api_key.get_secret_value()
-            if settings.openai_api_key
-            else ""
-        ),
-        "base_url": settings.openai_base_url or None,
-    }
-    if not settings.openai_text_model.lower().startswith("gpt-5"):
-        kwargs["temperature"] = 0
-    return kwargs
-
-
-def _build_llm(settings: Settings):
-    if settings.text_llm_provider == "claude":
-        api_key = settings.claude_api_key.get_secret_value() if settings.claude_api_key else ""
-        return ChatAnthropic(
-            model=settings.claude_text_model,
-            api_key=api_key,
-            base_url=settings.claude_base_url.rstrip("/"),
-            temperature=0,
-            max_tokens=settings.claude_max_tokens,
-            timeout=settings.claude_timeout_ms / 1000,
-        )
-    else:
-        return ChatOpenAI(**_openai_model_kwargs(settings))
-
-
-def create_agent(settings: Settings | None = None):
-    global _agent, _agent_settings_hash
-    resolved = settings or get_settings()
-    new_hash = _settings_hash(resolved)
-    if _agent is not None and _agent_settings_hash == new_hash:
-        return _agent
-
-    llm = _build_llm(resolved)
-    _agent = create_react_agent(
+def create_agent(
+    provider_config: RuntimeProviderConfig,
+    settings: Settings | None = None,
+):
+    llm = build_chat_model(provider_config, settings=settings)
+    return create_react_agent(
         model=llm,
         tools=ALL_TOOLS,
     )
-    _agent_settings_hash = new_hash
-    return _agent
 
 
 async def run_agent(
@@ -79,34 +38,64 @@ async def run_agent(
     chat_history: list | None = None,
     system_prompt: str = "",
 ) -> str:
-    agent = create_agent()
-    _settings = get_settings()
+    settings = get_settings()
+    configurable = config.setdefault("configurable", {})
+    side_effects_tracker = configurable.setdefault(
+        "side_effects",
+        {"executed": False, "tools": []},
+    )
+    session = configurable.get("session")
+    user = configurable.get("user")
+    trace_id = configurable.get("trace_id")
+
+    async def invoke(provider_config: RuntimeProviderConfig) -> str:
+        agent = create_agent(provider_config, settings=settings)
+        messages = _build_messages(
+            input_text=input_text,
+            chat_history=chat_history,
+            system_prompt=system_prompt,
+            provider_code=provider_config.provider_code,
+        )
+        result = await agent.ainvoke(
+            {"messages": messages},
+            config=config,
+        )
+        last_message = result["messages"][-1]
+        content = last_message.content if hasattr(last_message, "content") else str(last_message)
+        text = flatten_message_content(content).strip()
+        return text or SAFE_LLM_ERROR_MESSAGE
+
+    return await run_agent_with_fallback(
+        invoke=invoke,
+        session=session if isinstance(session, AsyncSession) else None,
+        settings=settings,
+        request_id=str(trace_id) if trace_id else None,
+        telegram_user_id=getattr(user, "telegram_user_id", None),
+        side_effects_tracker=side_effects_tracker,
+    )
+
+
+def _build_messages(
+    *,
+    input_text: str,
+    chat_history: list | None,
+    system_prompt: str,
+    provider_code: str,
+) -> list:
     messages = []
+    if chat_history:
+        messages.extend(chat_history)
     if system_prompt.strip():
-        if _settings.text_llm_provider == "claude":
-            system_content = [{
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }]
+        if provider_code == "anthropic":
+            system_content: Any = [
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
         else:
             system_content = system_prompt
-        messages = [SystemMessage(content=system_content)]
-    if chat_history:
-        messages = list(chat_history) + messages
+        messages.append(SystemMessage(content=system_content))
     messages.append(HumanMessage(content=input_text))
-    result = await agent.ainvoke(
-        {"messages": messages},
-        config=config,
-    )
-    last_message = result["messages"][-1]
-    content = last_message.content if hasattr(last_message, "content") else str(last_message)
-    if isinstance(content, list):
-        content = "\n".join(
-            c.get("text", "") if isinstance(c, dict) else str(c)
-            for c in content
-            if c
-        )
-    if isinstance(content, str):
-        return content.strip() or "Извините, произошла ошибка. Попробуйте ещё раз."
-    return str(content)
+    return messages

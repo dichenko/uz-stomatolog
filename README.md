@@ -92,14 +92,36 @@ On startup the app loads these files into `clinic_knowledge` if the table is emp
 
 ## Text LLM
 
-Основная текстовая модель ассистента настраивается отдельно от STT/TTS. Сейчас основной провайдер:
+Текстовые LLM-провайдеры настраиваются в админке, отдельно от STT/TTS:
+
+- page: `/admin/llm-providers`
+- providers: Anthropic, OpenAI, Mistral
+- each provider has enabled flag, priority, model, masked API key, test status
+- runtime uses enabled providers in priority order
+- fallback is attempted only for provider/network/auth/rate-limit/5xx failures
+
+LLM API keys are encrypted in `llm_provider_configs`. The backend returns only
+masked keys to the browser. Saving a provider without entering a new key keeps
+the existing encrypted key.
+
+Required/remaining env variables:
 
 ```text
-TEXT_LLM_PROVIDER=claude
-CLAUDE_TEXT_MODEL=claude-sonnet-4-5-20250929
+LLM_CONFIG_ENCRYPTION_KEY=...
+CLAUDE_BASE_URL=https://api.anthropic.com
+CLAUDE_TIMEOUT_MS=60000
+CLAUDE_MAX_TOKENS=2048
+MISTRAL_BASE_URL=https://api.mistral.ai
+MISTRAL_TIMEOUT_MS=60000
 ```
 
-`CLAUDE_API_KEY` должен быть задан в `.env`. OpenAI text model (`OPENAI_TEXT_MODEL`) оставлен только как fallback, если явно переключить `TEXT_LLM_PROVIDER=openai`; OpenAI STT/TTS настройки продолжают использоваться для речи.
+`ANTHROPIC_API_KEY` is optional and used only as a one-time import source when
+the Anthropic provider has no DB key yet. OpenAI speech settings remain in env
+because voice STT/TTS still uses the speech provider pipeline.
+
+To rotate a text LLM key, open `/admin/llm-providers`, paste the replacement key
+for that provider, save, then run `Test provider` or `Test full fallback chain`.
+The plaintext key is never shown after saving.
 
 ## LangChain / LangGraph Agent Tools
 

@@ -5,11 +5,13 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     MetaData,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -366,6 +368,118 @@ class AdminSetting(Base):
         nullable=False,
     )
     updated_by_tg_id: Mapped[str | None] = mapped_column(Text)
+
+
+class LlmModelCatalog(Base, TimestampMixin):
+    __tablename__ = "llm_model_catalog"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    availability_note: Mapped[str | None] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+        index=True,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_code",
+            "model_id",
+            name="uq_llm_model_catalog_provider_model",
+        ),
+        Index(
+            "ix_llm_model_catalog_provider_active_sort",
+            "provider_code",
+            "is_active",
+            "sort_order",
+        ),
+    )
+
+
+class LlmProviderConfig(Base, TimestampMixin):
+    __tablename__ = "llm_provider_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+        index=True,
+    )
+    priority: Mapped[int | None] = mapped_column(SmallInteger)
+    selected_model_id: Mapped[str | None] = mapped_column(String(128))
+    api_key_encrypted: Mapped[str | None] = mapped_column(Text)
+    api_key_masked: Mapped[str | None] = mapped_column(String(64))
+    api_key_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    last_status: Mapped[str | None] = mapped_column(
+        String(32),
+        server_default="unknown",
+    )
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(128))
+    last_error_message: Mapped[str | None] = mapped_column(Text)
+    updated_by_admin_id: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint(
+            "provider_code in ('openai', 'anthropic', 'mistral')",
+            name="llm_provider_configs_provider_code_valid",
+        ),
+        CheckConstraint(
+            "priority is null or priority in (1, 2, 3)",
+            name="llm_provider_configs_priority_valid",
+        ),
+        Index(
+            "ix_llm_provider_configs_enabled_priority",
+            "enabled",
+            "priority",
+        ),
+    )
+
+
+class LlmProviderCallLog(Base):
+    __tablename__ = "llm_provider_call_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
+    provider_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    model_id: Mapped[str | None] = mapped_column(String(128))
+    priority: Mapped[int | None] = mapped_column(SmallInteger)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    error_type: Mapped[str | None] = mapped_column(String(128))
+    error_message_sanitized: Mapped[str | None] = mapped_column(Text)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    fallback_attempt_number: Mapped[int | None] = mapped_column(Integer)
+    was_fallback: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+    tool_executed_before_failure: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
 
 
 class AdminAuditLog(Base):

@@ -1,5 +1,6 @@
 """LangChain @tool definitions for the Madina VoiceFlow agent."""
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -29,6 +30,7 @@ from app.services.clinic_knowledge import get_clinic_knowledge
 from app.telegram.texts import Language
 
 DEFAULT_TIMEZONE = "Asia/Tashkent"
+logger = logging.getLogger(__name__)
 
 
 def _get_config(config: RunnableConfig) -> dict[str, Any]:
@@ -55,6 +57,17 @@ def _get_admin_bot(config: RunnableConfig) -> Any | None:
     return _get_config(config).get("admin_bot")
 
 
+def _mark_side_effect(config: RunnableConfig, tool_name: str) -> None:
+    tracker = _get_config(config).setdefault(
+        "side_effects",
+        {"executed": False, "tools": []},
+    )
+    tracker["executed"] = True
+    tools = tracker.setdefault("tools", [])
+    if tool_name not in tools:
+        tools.append(tool_name)
+
+
 def _resolve_calendar(calendar_service: GoogleCalendarService | None) -> GoogleCalendarService | None:
     if calendar_service is not None:
         return calendar_service
@@ -62,6 +75,19 @@ def _resolve_calendar(calendar_service: GoogleCalendarService | None) -> GoogleC
         return create_google_calendar_service()
     except CalendarConfigError:
         return None
+
+
+def _parse_calendar_window(date_from: str, date_to: str) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(DEFAULT_TIMEZONE)
+    start_dt = datetime.fromisoformat(date_from)
+    end_dt = datetime.fromisoformat(date_to)
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=tz)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=tz)
+    if end_dt <= start_dt:
+        end_dt = start_dt + timedelta(days=1)
+    return start_dt, end_dt
 
 
 # ──────────────────── Patient tools (Режим A) ────────────────────
@@ -104,8 +130,7 @@ async def check_calendar_slots(
     doctor_type = doctor or "therapist"
 
     try:
-        start_dt = datetime.fromisoformat(date_from)
-        end_dt = datetime.fromisoformat(date_to)
+        start_dt, end_dt = _parse_calendar_window(date_from, date_to)
     except ValueError:
         return "Ошибка: неверный формат даты. Используй YYYY-MM-DD."
 
@@ -119,7 +144,14 @@ async def check_calendar_slots(
         ]
         return f"Календарь не подключён. Доступны демо-слоты: {slots}"
 
-    events = await resolved.list_events(time_min=start_dt, time_max=end_dt)
+    try:
+        events = await resolved.list_events(time_min=start_dt, time_max=end_dt)
+    except Exception:
+        logger.exception(
+            "calendar_slots_check_failed",
+            extra={"date_from": date_from, "date_to": date_to},
+        )
+        return "Не удалось проверить календарь. Передай пациента администратору."
     busy_events = calendar_events_to_busy_events(events)
     slots = find_available_slots(
         busy_events=busy_events,
@@ -178,6 +210,7 @@ async def create_appointment(
             return "Слот занят. Проверь календарь заново и предложи другое время."
 
     repo = AppointmentRepository(session)
+    _mark_side_effect(config, "create_appointment")
     appointment = await repo.create(
         user_id=user.id,
         service_type=service_type,
@@ -245,6 +278,7 @@ async def update_appointment(
 
     repo = AppointmentRepository(session)
     old_start = appointment.start_at
+    _mark_side_effect(config, "update_appointment")
     if new_datetime:
         try:
             new_start = datetime.fromisoformat(new_datetime)
@@ -268,6 +302,7 @@ async def update_appointment(
     )
 
     resolved = _resolve_calendar(calendar_service)
+    _mark_side_effect(config, "cancel_appointment")
     if resolved is not None and appointment.calendar_event_id:
         await resolved.update_event(
             appointment.calendar_event_id,
@@ -355,6 +390,7 @@ async def escalate_to_admin(summary: str, patient_contact: str, urgency: str = "
     admin_bot = _get_admin_bot(config)
 
     esc_repo = EscalationRepository(session)
+    _mark_side_effect(config, "escalate_to_admin")
     esc = await esc_repo.create(
         user_id=user.id,
         reason=f"escalation_{urgency}",
@@ -403,6 +439,7 @@ async def notify_sales(
     admin_bot = _get_admin_bot(config)
 
     tg_link = f"https://t.me/{user.telegram_username}" if user.telegram_username else f"tg://user?id={user.telegram_user_id}"
+    _mark_side_effect(config, "notify_sales")
 
     if stage == "warm":
         summary = f"WARM LEAD\n\nTG: {tg_link}\nClinic: {clinic_name or '-'}\nContact: {owner_contact or '-'}\nSummary: {details or '-'}"
