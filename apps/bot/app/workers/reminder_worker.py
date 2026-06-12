@@ -59,12 +59,15 @@ async def _process_due_reminders(
         for reminder in reminders:
             try:
                 await _send_reminder(session, reminder, bot, resolved_calendar, now)
+                await session.commit()
             except Exception:
+                await session.rollback()
                 logger.exception(
                     "reminder_send_failed",
                     extra={"reminder_id": reminder.id},
                 )
                 await _mark_failed(session, reminder.id)
+                await session.commit()
 
 
 async def _send_reminder(
