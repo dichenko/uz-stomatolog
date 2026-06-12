@@ -1,10 +1,19 @@
+from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
+from aiogram.enums import ChatAction
+from aiogram.exceptions import TelegramAPIError
+from aiogram.methods import SendChatAction
+from aiogram.types import Chat, Message, User
 from fastapi import HTTPException
 from pydantic import SecretStr
 
 from app.config import Settings
 from app.telegram.keyboards import language_keyboard
 from app.telegram.texts import LANGUAGE_LABELS, normalize_language, text
+from app.telegram.typing_action import TypingActionMiddleware
 from app.telegram.webhook import _validate_secret
 
 
@@ -40,3 +49,49 @@ def test_webhook_secret_validation_allows_valid_secret():
     settings = Settings(telegram_webhook_secret=SecretStr("expected-secret"))
 
     _validate_secret(settings, "expected-secret")
+
+
+def _message_with_bot(bot):
+    message = Message(
+        message_id=1,
+        date=datetime.now(),
+        chat=Chat(id=123, type="private"),
+        from_user=User(id=456, is_bot=False, first_name="Ali"),
+        text="hello",
+    )
+    return message.as_(bot)
+
+
+async def test_typing_action_middleware_sends_typing_action():
+    bot = SimpleNamespace(send_chat_action=AsyncMock())
+    event = _message_with_bot(bot)
+    handler = AsyncMock(return_value="ok")
+
+    result = await TypingActionMiddleware()(handler, event, {})
+
+    assert result == "ok"
+    bot.send_chat_action.assert_awaited_once_with(
+        chat_id=123,
+        action=ChatAction.TYPING,
+    )
+    handler.assert_awaited_once_with(event, {})
+
+
+async def test_typing_action_middleware_does_not_block_handler_on_api_error():
+    method = SendChatAction(chat_id=123, action=ChatAction.TYPING)
+    bot = SimpleNamespace(
+        send_chat_action=AsyncMock(
+            side_effect=TelegramAPIError(method=method, message="failed")
+        )
+    )
+    event = _message_with_bot(bot)
+    handler = AsyncMock(return_value="ok")
+
+    result = await TypingActionMiddleware()(handler, event, {})
+
+    assert result == "ok"
+    bot.send_chat_action.assert_awaited_once_with(
+        chat_id=123,
+        action=ChatAction.TYPING,
+    )
+    handler.assert_awaited_once_with(event, {})
