@@ -17,6 +17,10 @@ class ChatMessage(TypedDict):
     content: str
 
 
+def _supports_temperature(model: str) -> bool:
+    return not model.lower().startswith("gpt-5")
+
+
 async def complete_text(
     *,
     messages: list[ChatMessage],
@@ -132,9 +136,10 @@ async def _complete_with_openai(
 
     kwargs: dict[str, object] = {
         "model": settings.openai_text_model,
-        "temperature": temperature,
         "messages": messages,
     }
+    if _supports_temperature(settings.openai_text_model):
+        kwargs["temperature"] = temperature
     if response_format == "json_object":
         kwargs["response_format"] = {"type": "json_object"}
 

@@ -1,3 +1,5 @@
+name: dental-bot
+
 services:
   bot:
     build:
@@ -34,3 +36,5 @@ services:
 
 volumes:
   postgres_data:
+    external: true
+    name: infra_postgres_data

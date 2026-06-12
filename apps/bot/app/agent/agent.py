@@ -26,6 +26,21 @@ def _settings_hash(settings: Settings) -> int:
     ))
 
 
+def _openai_model_kwargs(settings: Settings) -> dict[str, object]:
+    kwargs: dict[str, object] = {
+        "model": settings.openai_text_model,
+        "api_key": (
+            settings.openai_api_key.get_secret_value()
+            if settings.openai_api_key
+            else ""
+        ),
+        "base_url": settings.openai_base_url or None,
+    }
+    if not settings.openai_text_model.lower().startswith("gpt-5"):
+        kwargs["temperature"] = 0
+    return kwargs
+
+
 def _build_llm(settings: Settings):
     if settings.text_llm_provider == "claude":
         api_key = settings.claude_api_key.get_secret_value() if settings.claude_api_key else ""
@@ -38,13 +53,7 @@ def _build_llm(settings: Settings):
             timeout=settings.claude_timeout_ms / 1000,
         )
     else:
-        api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else ""
-        return ChatOpenAI(
-            model=settings.openai_text_model,
-            api_key=api_key,
-            base_url=settings.openai_base_url or None,
-            temperature=0,
-        )
+        return ChatOpenAI(**_openai_model_kwargs(settings))
 
 
 def create_agent(settings: Settings | None = None):
