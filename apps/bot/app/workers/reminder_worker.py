@@ -11,7 +11,7 @@ from app.calendar import (
     GoogleCalendarService,
     create_google_calendar_service,
 )
-from app.db.models import User
+from app.db.models import Appointment, User
 from app.db.repositories import ReminderRepository
 from app.telegram.texts import Language
 
@@ -74,9 +74,7 @@ async def _send_reminder(
     calendar_service: GoogleCalendarService | None,
     now: datetime,
 ) -> None:
-    appointment = await session.get(
-        reminder.appointment.__class__, reminder.appointment_id
-    )
+    appointment = await session.get(Appointment, reminder.appointment_id)
     if appointment is None:
         logger.warning(
             "reminder_appointment_missing",
