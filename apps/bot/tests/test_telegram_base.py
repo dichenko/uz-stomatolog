@@ -11,7 +11,10 @@ from fastapi import HTTPException
 from pydantic import SecretStr
 
 from app.config import Settings
-from app.telegram.handlers_start import _admin_access_denied_text, _admin_link_text
+from app.telegram.handlers_start import (
+    _admin_access_denied_text,
+    _admin_one_time_link_text,
+)
 from app.telegram.keyboards import language_keyboard
 from app.telegram.texts import LANGUAGE_LABELS, normalize_language, text
 from app.telegram.typing_action import TypingActionMiddleware
@@ -38,14 +41,15 @@ def test_texts_are_localized_and_language_falls_back_to_ru():
 
 
 def test_admin_command_texts():
-    assert _admin_link_text("https://bot.example.com/", "ru") == (
-        "Админка: https://bot.example.com/admin/login"
+    assert _admin_one_time_link_text("https://bot.example.com/admin/auth", "ru") == (
+        "Admin one-time link (valid 10 minutes):\n"
+        "https://bot.example.com/admin/auth"
     )
-    assert _admin_link_text("https://bot.example.com", "en") == (
-        "Admin panel: https://bot.example.com/admin/login"
+    assert _admin_one_time_link_text("https://bot.example.com/admin/auth", "en") == (
+        "Admin one-time link (valid 10 minutes):\n"
+        "https://bot.example.com/admin/auth"
     )
     assert "only to administrators" in _admin_access_denied_text("en")
-
 
 def test_webhook_secret_validation_rejects_invalid_secret():
     settings = Settings(telegram_webhook_secret=SecretStr("expected-secret"))

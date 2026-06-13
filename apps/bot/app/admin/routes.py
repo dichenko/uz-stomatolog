@@ -27,6 +27,10 @@ from app.admin.history_repository import (
     parse_date,
     parse_time,
 )
+from app.admin.one_time_links import (
+    AdminOneTimeLinkError,
+    consume_admin_one_time_login_token,
+)
 from app.admin.settings_repository import get_all_settings, get_setting, set_setting
 from app.config import get_settings
 from app.llm.manager import test_provider
@@ -158,6 +162,69 @@ async def auth_telegram_callback(request: Request):
             "<h1>Internal server error</h1><p>Please try again later.</p>",
             status_code=500,
         )
+
+
+@router.get("/auth/telegram/one-time")
+async def auth_telegram_one_time(request: Request):
+    settings = get_settings()
+    token = str(request.query_params.get("token") or "")
+
+    async with _get_db_session() as session:
+        try:
+            payload = await consume_admin_one_time_login_token(
+                session,
+                token=token,
+                settings=settings,
+            )
+            tg_id = payload["tg_id"]
+
+            await log_audit(
+                session,
+                admin_tg_id=tg_id,
+                action="one_time_login_attempt",
+                ip_address=request.client.host if request.client else None,
+            )
+
+            if not is_admin(tg_id, settings):
+                await log_audit(
+                    session,
+                    admin_tg_id=tg_id,
+                    action="one_time_login_forbidden",
+                    ip_address=request.client.host if request.client else None,
+                )
+                await session.commit()
+                return HTMLResponse("<h1>Access denied</h1>", status_code=403)
+
+            request.session[SESSION_KEY_TG_ID] = tg_id
+            request.session[SESSION_KEY_USERNAME] = payload["username"]
+            request.session[SESSION_KEY_NAME] = payload["name"]
+            request.session[SESSION_KEY_PICTURE] = ""
+
+            await log_audit(
+                session,
+                admin_tg_id=tg_id,
+                action="one_time_login_success",
+                ip_address=request.client.host if request.client else None,
+            )
+            await session.commit()
+            return RedirectResponse("/admin/", status_code=HTTP_302_FOUND)
+        except AdminOneTimeLinkError as exc:
+            await session.rollback()
+            logger.warning(
+                "admin_one_time_login_rejected",
+                extra={"reason": str(exc)},
+            )
+            return HTMLResponse(
+                "<h1>Admin link expired or already used</h1>",
+                status_code=403,
+            )
+        except Exception:
+            await session.rollback()
+            logger.exception("admin_one_time_login_unexpected_error")
+            return HTMLResponse(
+                "<h1>Internal server error</h1><p>Please try again later.</p>",
+                status_code=500,
+            )
 
 
 @router.post("/auth/logout")

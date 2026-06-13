@@ -4,6 +4,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import is_admin
+from app.admin.one_time_links import create_admin_one_time_login_link
 from app.config import get_settings
 from app.db.models import Conversation, User
 from app.db.repositories import (
@@ -83,8 +84,16 @@ async def admin_handler(
     language = normalize_language(db_user.preferred_language)
     if not is_admin(str(db_user.telegram_user_id), settings):
         response_text = _admin_access_denied_text(language)
+        stored_text = response_text
     else:
-        response_text = _admin_link_text(settings.app_base_url, language)
+        admin_url = await create_admin_one_time_login_link(
+            db_session,
+            user=db_user,
+            app_base_url=settings.app_base_url,
+            settings=settings,
+        )
+        response_text = _admin_one_time_link_text(admin_url, language)
+        stored_text = _admin_one_time_link_text("[redacted]", language)
 
     sent = await message.answer(response_text)
     await save_outgoing_message(
@@ -92,10 +101,10 @@ async def admin_handler(
         user=db_user,
         conversation=db_conversation,
         telegram_message_id=sent.message_id,
-        text=response_text,
+        text=stored_text,
         language=language,
         trace_id=trace_id,
-        raw_payload={"command": "admin"},
+        raw_payload={"command": "admin", "one_time_link": response_text != stored_text},
     )
 
 
@@ -148,13 +157,12 @@ async def help_handler(
     )
 
 
-def _admin_link_text(app_base_url: str, language: str) -> str:
-    url = f"{app_base_url.rstrip('/')}/admin/login"
+def _admin_one_time_link_text(url: str, language: str) -> str:
     if language == "uz":
-        return f"Admin panel: {url}"
+        return f"Admin one-time link (valid 10 minutes):\n{url}"
     if language == "en":
-        return f"Admin panel: {url}"
-    return f"Админка: {url}"
+        return f"Admin one-time link (valid 10 minutes):\n{url}"
+    return f"Admin one-time link (valid 10 minutes):\n{url}"
 
 
 def _admin_access_denied_text(language: str) -> str:
