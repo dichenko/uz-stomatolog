@@ -34,6 +34,34 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _payload_from_token(token: str, settings: Settings) -> dict[str, str]:
+    if not token:
+        raise AdminOneTimeLinkError("missing token")
+
+    try:
+        payload = _serializer(settings).loads(
+            token,
+            max_age=ONE_TIME_LINK_TTL_SECONDS,
+        )
+    except SignatureExpired as exc:
+        raise AdminOneTimeLinkError("expired token") from exc
+    except BadSignature as exc:
+        raise AdminOneTimeLinkError("invalid token") from exc
+
+    if not isinstance(payload, dict):
+        raise AdminOneTimeLinkError("invalid payload")
+
+    tg_id = str(payload.get("tg_id") or "")
+    if not tg_id:
+        raise AdminOneTimeLinkError("missing tg_id")
+
+    return {
+        "tg_id": tg_id,
+        "username": str(payload.get("username") or ""),
+        "name": str(payload.get("name") or ""),
+    }
+
+
 def _clean_store(store: dict[str, Any]) -> dict[str, Any]:
     tokens = store.get("tokens")
     if not isinstance(tokens, dict):
@@ -99,25 +127,8 @@ async def consume_admin_one_time_login_token(
     token: str,
     settings: Settings,
 ) -> dict[str, str]:
-    if not token:
-        raise AdminOneTimeLinkError("missing token")
-
-    try:
-        payload = _serializer(settings).loads(
-            token,
-            max_age=ONE_TIME_LINK_TTL_SECONDS,
-        )
-    except SignatureExpired as exc:
-        raise AdminOneTimeLinkError("expired token") from exc
-    except BadSignature as exc:
-        raise AdminOneTimeLinkError("invalid token") from exc
-
-    if not isinstance(payload, dict):
-        raise AdminOneTimeLinkError("invalid payload")
-
-    tg_id = str(payload.get("tg_id") or "")
-    if not tg_id:
-        raise AdminOneTimeLinkError("missing tg_id")
+    payload = _payload_from_token(token, settings)
+    tg_id = payload["tg_id"]
 
     store = _clean_store(await get_setting(session, TOKEN_STORE_KEY))
     tokens = store.setdefault("tokens", {})
@@ -132,8 +143,39 @@ async def consume_admin_one_time_login_token(
         raise AdminOneTimeLinkError("token owner mismatch")
 
     await set_setting(session, TOKEN_STORE_KEY, store, tg_id=tg_id)
-    return {
-        "tg_id": tg_id,
-        "username": str(payload.get("username") or ""),
-        "name": str(payload.get("name") or ""),
-    }
+    return payload
+
+
+async def validate_admin_one_time_login_token(
+    session: AsyncSession,
+    *,
+    token: str,
+    settings: Settings,
+) -> dict[str, str]:
+    payload = _payload_from_token(token, settings)
+    tg_id = payload["tg_id"]
+
+    store = await get_setting(session, TOKEN_STORE_KEY)
+    tokens = store.get("tokens")
+    if not isinstance(tokens, dict):
+        raise AdminOneTimeLinkError("used token")
+
+    record = tokens.get(_token_hash(token))
+    if not isinstance(record, dict):
+        raise AdminOneTimeLinkError("used token")
+    if str(record.get("tg_id") or "") != tg_id:
+        raise AdminOneTimeLinkError("token owner mismatch")
+
+    expires_at = record.get("expires_at")
+    if not isinstance(expires_at, str):
+        raise AdminOneTimeLinkError("invalid token record")
+    try:
+        expires = datetime.fromisoformat(expires_at)
+    except ValueError as exc:
+        raise AdminOneTimeLinkError("invalid token record") from exc
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if expires <= _now():
+        raise AdminOneTimeLinkError("expired token")
+
+    return payload

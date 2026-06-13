@@ -1,5 +1,7 @@
+import html
 import logging
 from typing import Any
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -30,6 +32,7 @@ from app.admin.history_repository import (
 from app.admin.one_time_links import (
     AdminOneTimeLinkError,
     consume_admin_one_time_login_token,
+    validate_admin_one_time_login_token,
 )
 from app.admin.settings_repository import get_all_settings, get_setting, set_setting
 from app.config import get_settings
@@ -168,6 +171,93 @@ async def auth_telegram_callback(request: Request):
 async def auth_telegram_one_time(request: Request):
     settings = get_settings()
     token = str(request.query_params.get("token") or "")
+
+    async with _get_db_session() as session:
+        try:
+            await validate_admin_one_time_login_token(
+                session,
+                token=token,
+                settings=settings,
+            )
+        except AdminOneTimeLinkError as exc:
+            logger.warning(
+                "admin_one_time_login_preview_rejected",
+                extra={"reason": str(exc)},
+            )
+            return HTMLResponse(
+                "<h1>Admin link expired or already used</h1>",
+                status_code=403,
+            )
+
+    escaped_token = html.escape(token, quote=True)
+    return HTMLResponse(
+        f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin login</title>
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f7f9;
+      color: #17202a;
+    }}
+    main {{
+      width: min(420px, calc(100vw - 32px));
+      padding: 28px;
+      border: 1px solid #d8dee7;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 30px rgba(20, 32, 45, 0.08);
+    }}
+    h1 {{
+      margin: 0 0 12px;
+      font-size: 22px;
+      line-height: 1.2;
+    }}
+    p {{
+      margin: 0 0 20px;
+      line-height: 1.45;
+      color: #4d5b6a;
+    }}
+    button {{
+      width: 100%;
+      min-height: 44px;
+      border: 0;
+      border-radius: 6px;
+      background: #1769e0;
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Admin login</h1>
+    <p>This one-time link is ready. Press the button to enter the admin panel.</p>
+    <form method="post" action="/admin/auth/telegram/one-time">
+      <input type="hidden" name="token" value="{escaped_token}">
+      <button type="submit">Enter admin panel</button>
+    </form>
+  </main>
+</body>
+</html>"""
+    )
+
+
+@router.post("/auth/telegram/one-time")
+async def auth_telegram_one_time_submit(request: Request):
+    settings = get_settings()
+    body = (await request.body()).decode("utf-8", errors="replace")
+    token = str((parse_qs(body).get("token") or [""])[0])
 
     async with _get_db_session() as session:
         try:

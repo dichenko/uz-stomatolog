@@ -6,6 +6,7 @@ from app.admin.one_time_links import (
     AdminOneTimeLinkError,
     consume_admin_one_time_login_token,
     create_admin_one_time_login_link,
+    validate_admin_one_time_login_token,
 )
 from app.config import Settings
 from app.db.models import User
@@ -33,6 +34,20 @@ async def test_admin_one_time_login_token_is_single_use(session):
     )
     token = parse_qs(urlparse(link).query)["token"][0]
 
+    preview_payload = await validate_admin_one_time_login_token(
+        session,
+        token=token,
+        settings=settings,
+    )
+    assert preview_payload["tg_id"] == "12345"
+
+    second_preview_payload = await validate_admin_one_time_login_token(
+        session,
+        token=token,
+        settings=settings,
+    )
+    assert second_preview_payload["tg_id"] == "12345"
+
     payload = await consume_admin_one_time_login_token(
         session,
         token=token,
@@ -44,6 +59,13 @@ async def test_admin_one_time_login_token_is_single_use(session):
         "username": "admin",
         "name": "Admin User",
     }
+
+    with pytest.raises(AdminOneTimeLinkError):
+        await validate_admin_one_time_login_token(
+            session,
+            token=token,
+            settings=settings,
+        )
 
     with pytest.raises(AdminOneTimeLinkError):
         await consume_admin_one_time_login_token(
