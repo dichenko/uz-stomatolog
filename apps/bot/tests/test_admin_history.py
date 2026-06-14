@@ -14,7 +14,7 @@ from app.db.repositories import (
 )
 
 
-async def test_history_page_pairs_user_message_with_bot_answer_and_actions(session):
+async def test_history_page_returns_all_chat_messages(session):
     user = await UserRepository(session).upsert_from_telegram(
         telegram_user_id=9001,
         preferred_language="en",
@@ -37,7 +37,7 @@ async def test_history_page_pairs_user_message_with_bot_answer_and_actions(sessi
         trace_id="history-trace-1",
     )
     incoming.created_at = created_at
-    await messages.save_message(
+    outgoing = await messages.save_message(
         user_id=user.id,
         conversation_id=conversation.id,
         telegram_message_id=2,
@@ -48,6 +48,7 @@ async def test_history_page_pairs_user_message_with_bot_answer_and_actions(sessi
         raw_payload={"admin_notification_sent": False},
         trace_id="history-trace-1",
     )
+    outgoing.created_at = created_at + timedelta(seconds=1)
     await ExecutionRunRepository(session).start(
         trace_id="history-trace-1",
         user_id=user.id,
@@ -67,14 +68,18 @@ async def test_history_page_pairs_user_message_with_bot_answer_and_actions(sessi
         HistoryQuery(sort_field="date", sort_dir="asc")
     )
 
-    assert page.total == 1
-    assert page.filtered == 1
+    assert page.total == 2
+    assert page.filtered == 2
     assert page.rows[0].date == "2026-05-20"
     assert page.rows[0].time == "10:30:00"
+    assert page.rows[0].direction == "in"
     assert page.rows[0].tg_id == 9001
     assert page.rows[0].language == "en"
     assert page.rows[0].user_text == "How much is cleaning?"
-    assert page.rows[0].llm_answer_text == "Cleaning costs 350,000 UZS."
+    assert page.rows[0].llm_answer_text == ""
+    assert page.rows[1].direction == "out"
+    assert page.rows[1].user_text == ""
+    assert page.rows[1].llm_answer_text == "Cleaning costs 350,000 UZS."
 
     time_filtered = await MessageHistoryRepository(session).fetch_page(
         HistoryQuery(
@@ -85,7 +90,7 @@ async def test_history_page_pairs_user_message_with_bot_answer_and_actions(sessi
             ),
         )
     )
-    assert time_filtered.filtered == 1
+    assert time_filtered.filtered == 2
 
 
 async def test_history_filters_by_message_type_and_agent_action(session):
@@ -158,8 +163,23 @@ async def test_history_filters_by_message_type_and_agent_action(session):
         )
     )
 
-    assert page.total == 1
+    assert page.total == 2
     assert page.filtered == 1
     assert page.rows[0].message_type == "voice"
-    assert "Создана запись в календаре" in page.rows[0].agent_action
+    assert page.rows[0].direction == "in"
+    assert "Создана запись" in page.rows[0].agent_action
     assert "Оповещение группы админов" in page.rows[0].agent_action
+
+    outgoing_page = await MessageHistoryRepository(session).fetch_page(
+        HistoryQuery(
+            filters=HistoryFilters(
+                direction="out",
+                agent_action="Создана запись",
+            )
+        )
+    )
+
+    assert outgoing_page.total == 2
+    assert outgoing_page.filtered == 1
+    assert outgoing_page.rows[0].direction == "out"
+    assert "Создана запись в календаре" in outgoing_page.rows[0].agent_action

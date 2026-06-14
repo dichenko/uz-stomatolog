@@ -490,11 +490,14 @@ async def api_history(request: Request):
     await _require_admin(request)
     params = request.query_params
     order_column = _parse_int(params.get("order[0][column]"), default=0)
-    sort_field = params.get(f"columns[{order_column}][data]", "date")
-    sort_dir = params.get("order[0][dir]", "desc")
+    sort_field = params.get("sort_field") or params.get(
+        f"columns[{order_column}][data]",
+        "date",
+    )
+    sort_dir = params.get("sort_dir") or params.get("order[0][dir]", "desc")
     query = HistoryQuery(
         start=_parse_int(params.get("start"), default=0),
-        length=_parse_int(params.get("length"), default=20),
+        length=_parse_int(params.get("length"), default=10),
         sort_field=_normalize_history_sort_field(sort_field),
         sort_dir="asc" if sort_dir == "asc" else "desc",
         filters=HistoryFilters(
@@ -502,6 +505,7 @@ async def api_history(request: Request):
             date_to=parse_date(params.get("filter_date_to")),
             time_from=parse_time(params.get("filter_time_from")),
             time_to=parse_time(params.get("filter_time_to")),
+            direction=str(params.get("filter_direction") or "").strip(),
             tg_id=str(params.get("filter_tg_id") or "").strip(),
             user_text=str(params.get("filter_user_text") or "").strip(),
             llm_answer_text=str(params.get("filter_llm_answer_text") or "").strip(),
@@ -715,6 +719,7 @@ def _render_history_page() -> str:
                     <tr>
                         <th>Дата</th>
                         <th>Время</th>
+                        <th>Direction</th>
                         <th>TG ID</th>
                         <th>Текст пользователя</th>
                         <th>Ответ LLM</th>
@@ -730,6 +735,13 @@ def _render_history_page() -> str:
                         <th>
                             <input id="filter-time-from" type="time" aria-label="Время с">
                             <input id="filter-time-to" type="time" aria-label="Время по">
+                        </th>
+                        <th>
+                            <select id="filter-direction">
+                                <option value="">All</option>
+                                <option value="in">in</option>
+                                <option value="out">out</option>
+                            </select>
                         </th>
                         <th><input id="filter-tg-id" type="search" placeholder="TG ID"></th>
                         <th><input id="filter-user-text" type="search" placeholder="Поиск"></th>
@@ -783,8 +795,8 @@ def _render_history_page() -> str:
             searching: true,
             orderCellsTop: true,
             scrollX: true,
-            pageLength: 20,
-            lengthMenu: [[20, 50, 100], [20, 50, 100]],
+            pageLength: 10,
+            lengthMenu: [[10, 20, 50, 100], [10, 20, 50, 100]],
             order: [[0, 'desc']],
             ajax: {
                 url: '/admin/api/history',
@@ -793,6 +805,7 @@ def _render_history_page() -> str:
                     d.filter_date_to = $('#filter-date-to').val();
                     d.filter_time_from = $('#filter-time-from').val();
                     d.filter_time_to = $('#filter-time-to').val();
+                    d.filter_direction = $('#filter-direction').val();
                     d.filter_tg_id = $('#filter-tg-id').val();
                     d.filter_user_text = $('#filter-user-text').val();
                     d.filter_llm_answer_text = $('#filter-llm-answer').val();
@@ -804,6 +817,7 @@ def _render_history_page() -> str:
             columns: [
                 {data: 'date'},
                 {data: 'time'},
+                {data: 'direction'},
                 {data: 'tg_id'},
                 {data: 'user_text', className: 'history-text'},
                 {data: 'llm_answer_text', className: 'history-text'},
@@ -1532,6 +1546,7 @@ def _normalize_history_sort_field(value: str):
     allowed = {
         "date",
         "time",
+        "direction",
         "tg_id",
         "user_text",
         "llm_answer_text",

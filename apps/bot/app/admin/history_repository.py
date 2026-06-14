@@ -9,12 +9,13 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import Appointment, ExecutionRun, Message, User
 
-PAGE_SIZE_OPTIONS = (20, 50, 100)
-DEFAULT_PAGE_SIZE = 20
+PAGE_SIZE_OPTIONS = (10, 20, 50, 100)
+DEFAULT_PAGE_SIZE = 10
 
 HistorySortField = Literal[
     "date",
     "time",
+    "direction",
     "tg_id",
     "user_text",
     "llm_answer_text",
@@ -30,6 +31,7 @@ class HistoryFilters:
     date_to: date | None = None
     time_from: time | None = None
     time_to: time | None = None
+    direction: str = ""
     tg_id: str = ""
     user_text: str = ""
     llm_answer_text: str = ""
@@ -52,6 +54,7 @@ class HistoryQuery:
 class HistoryRow:
     date: str
     time: str
+    direction: str
     tg_id: int
     user_text: str
     llm_answer_text: str
@@ -64,6 +67,7 @@ class HistoryRow:
         return {
             "date": self.date,
             "time": self.time,
+            "direction": self.direction,
             "tg_id": self.tg_id,
             "user_text": self.user_text,
             "llm_answer_text": self.llm_answer_text,
@@ -82,10 +86,9 @@ class HistoryPage:
 
 @dataclass(frozen=True)
 class _RawHistoryRow:
-    input_message: Message
+    message: Message
     user: User
-    answer_text: str
-    answer_payload: dict[str, Any]
+    payload: dict[str, Any]
     run_intent: str | None
     run_output: dict[str, Any]
     has_created_appointment: bool
@@ -119,15 +122,13 @@ class MessageHistoryRepository:
         return int(result.scalar_one())
 
     async def _count_filtered(self, query: HistoryQuery) -> int:
-        outgoing = aliased(Message)
         stmt = (
             select(func.count(Message.id))
             .select_from(Message)
             .join(User, User.id == Message.user_id)
-            .outerjoin(outgoing, outgoing.id == _answer_message_id_subquery())
             .where(*_base_message_conditions())
         )
-        stmt = _apply_sql_filters(stmt, outgoing, query.filters)
+        stmt = _apply_sql_filters(stmt, query.filters)
         result = await self.session.execute(stmt)
         return int(result.scalar_one())
 
@@ -137,14 +138,12 @@ class MessageHistoryRepository:
         *,
         paginate: bool,
     ) -> list[_RawHistoryRow]:
-        outgoing = aliased(Message)
         run = aliased(ExecutionRun)
         stmt = (
             select(
                 Message,
                 User,
-                outgoing.text.label("answer_text"),
-                outgoing.raw_payload.label("answer_payload"),
+                Message.raw_payload.label("payload"),
                 run.intent.label("run_intent"),
                 run.graph_output.label("run_output"),
                 exists()
@@ -153,12 +152,11 @@ class MessageHistoryRepository:
             )
             .select_from(Message)
             .join(User, User.id == Message.user_id)
-            .outerjoin(outgoing, outgoing.id == _answer_message_id_subquery())
             .outerjoin(run, run.input_message_id == Message.id)
             .where(*_base_message_conditions())
         )
-        stmt = _apply_sql_filters(stmt, outgoing, query.filters)
-        stmt = _apply_sql_sort(stmt, outgoing, query.sort_field, query.sort_dir)
+        stmt = _apply_sql_filters(stmt, query.filters)
+        stmt = _apply_sql_sort(stmt, query.sort_field, query.sort_dir)
         if paginate:
             stmt = stmt.offset(query.start).limit(query.length)
 
@@ -167,20 +165,16 @@ class MessageHistoryRepository:
         for (
             input_message,
             user,
-            answer_text,
-            answer_payload,
+            payload,
             run_intent,
             run_output,
             has_created_appointment,
         ) in result.all():
             rows.append(
                 _RawHistoryRow(
-                    input_message=input_message,
+                    message=input_message,
                     user=user,
-                    answer_text=answer_text or "",
-                    answer_payload=(
-                        answer_payload if isinstance(answer_payload, dict) else {}
-                    ),
+                    payload=payload if isinstance(payload, dict) else {},
                     run_intent=run_intent,
                     run_output=run_output if isinstance(run_output, dict) else {},
                     has_created_appointment=bool(has_created_appointment),
@@ -214,33 +208,14 @@ def _requires_python_action_pass(query: HistoryQuery) -> bool:
 
 def _base_message_conditions() -> tuple[ColumnElement[bool], ...]:
     return (
-        Message.direction == "in",
         Message.text.is_not(None),
         Message.text != "",
         Message.message_type.in_(("text", "voice", "callback", "system")),
     )
 
 
-def _answer_message_id_subquery() -> ColumnElement[int]:
-    answer = aliased(Message)
-    return (
-        select(func.min(answer.id))
-        .where(
-            answer.trace_id == Message.trace_id,
-            answer.conversation_id == Message.conversation_id,
-            answer.direction == "out",
-            answer.message_type == "text",
-            answer.text.is_not(None),
-            answer.text != "",
-        )
-        .correlate(Message)
-        .scalar_subquery()
-    )
-
-
 def _apply_sql_filters(
     stmt: Select,
-    outgoing: Message,
     filters: HistoryFilters,
 ) -> Select:
     conditions: list[ColumnElement[bool]] = []
@@ -256,10 +231,14 @@ def _apply_sql_filters(
         conditions.append(
             cast(User.telegram_user_id, String).like(f"%{filters.tg_id}%")
         )
+    if filters.direction:
+        conditions.append(Message.direction == filters.direction)
     if filters.user_text:
+        conditions.append(Message.direction == "in")
         conditions.append(Message.text.ilike(f"%{filters.user_text}%"))
     if filters.llm_answer_text:
-        conditions.append(outgoing.text.ilike(f"%{filters.llm_answer_text}%"))
+        conditions.append(Message.direction == "out")
+        conditions.append(Message.text.ilike(f"%{filters.llm_answer_text}%"))
     if filters.language:
         language_expr = func.coalesce(Message.language, User.preferred_language, "")
         conditions.append(language_expr == filters.language)
@@ -270,12 +249,12 @@ def _apply_sql_filters(
         conditions.append(
             or_(
                 Message.text.ilike(needle),
-                outgoing.text.ilike(needle),
                 cast(User.telegram_user_id, String).like(needle),
                 func.coalesce(
                     Message.language, User.preferred_language, ""
                 ).ilike(needle),
                 Message.message_type.ilike(needle),
+                Message.direction.ilike(needle),
             )
         )
     if conditions:
@@ -285,24 +264,25 @@ def _apply_sql_filters(
 
 def _apply_sql_sort(
     stmt: Select,
-    outgoing: Message,
     sort_field: HistorySortField,
     sort_dir: Literal["asc", "desc"],
 ) -> Select:
-    sort_expr = _sort_expression(outgoing, sort_field)
+    sort_expr = _sort_expression(sort_field)
     ordered = sort_expr.asc() if sort_dir == "asc" else sort_expr.desc()
     return stmt.order_by(ordered, Message.id.desc())
 
 
-def _sort_expression(outgoing: Message, sort_field: HistorySortField):
+def _sort_expression(sort_field: HistorySortField):
     if sort_field == "time":
         return Message.created_at
+    if sort_field == "direction":
+        return Message.direction
     if sort_field == "tg_id":
         return User.telegram_user_id
     if sort_field == "user_text":
         return Message.text
     if sort_field == "llm_answer_text":
-        return outgoing.text
+        return Message.text
     if sort_field == "language":
         return func.coalesce(Message.language, User.preferred_language, "")
     if sort_field == "message_type":
@@ -311,23 +291,26 @@ def _sort_expression(outgoing: Message, sort_field: HistorySortField):
 
 
 def _to_history_row(row: _RawHistoryRow) -> HistoryRow:
-    created_at = row.input_message.created_at
-    language = row.input_message.language or row.user.preferred_language or ""
+    message = row.message
+    created_at = message.created_at
+    language = message.language or row.user.preferred_language or ""
+    message_text = message.text or ""
     return HistoryRow(
         date=created_at.date().isoformat(),
         time=created_at.time().replace(microsecond=0).isoformat(),
+        direction=message.direction,
         tg_id=row.user.telegram_user_id,
-        user_text=row.input_message.text or "",
-        llm_answer_text=row.answer_text,
+        user_text=message_text if message.direction == "in" else "",
+        llm_answer_text=message_text if message.direction == "out" else "",
         language=language,
-        message_type=row.input_message.message_type,
+        message_type=message.message_type,
         agent_action=", ".join(_detect_actions(row)),
         created_at=created_at,
     )
 
 
 def _detect_actions(row: _RawHistoryRow) -> list[str]:
-    payload = row.answer_payload
+    payload = row.payload
     output = row.run_output
     actions: list[str] = []
 
