@@ -253,7 +253,7 @@ async def test_aisha_tts_posts_form_and_downloads_audio(monkeypatch):
                 "language": (None, "uz"),
                 "model": (None, "Gulnoza"),
                 "mood": (None, "Neutral"),
-                "speed": (None, "1.2"),
+                "speed": (None, "0.75"),
             },
             "timeout": 12,
         },
@@ -321,7 +321,7 @@ async def test_aisha_tts_logs_error_settings_without_api_key(monkeypatch, caplog
     assert record.language == "uz"
     assert record.model == "Gulnoza"
     assert record.mood == "Neutral"
-    assert record.speed == 1.0
+    assert record.speed == 0.75
     assert "secret-key" not in caplog.text
 
 
@@ -394,7 +394,7 @@ async def test_azure_tts_posts_ssml_to_speech_service(monkeypatch):
                 '<speak version="1.0" '
                 'xmlns="http://www.w3.org/2001/10/synthesis" '
                 'xml:lang="ru-RU"><voice name="ru-RU-SvetlanaNeural">'
-                '<prosody rate="20%" pitch="+2st" range="+10%">Привет тест'
+                '<prosody rate="0.75" pitch="+2st" range="+10%">Привет тест'
                 "</prosody></voice></speak>"
             ),
             "timeout": 12,
@@ -449,7 +449,7 @@ async def test_azure_tts_logs_error_settings_without_api_key(monkeypatch, caplog
     assert record.body == "bad voice"
     assert record.voice == "ru-RU-SvetlanaNeural"
     assert record.output_format == "ogg-24khz-16bit-mono-opus"
-    assert record.rate == "20%"
+    assert record.rate == "0.75"
     assert record.pitch == "+2st"
     assert record.range == "+10%"
     assert "secret-key" not in caplog.text
@@ -515,7 +515,7 @@ async def test_yandex_tts_posts_text_to_speechkit(monkeypatch):
                 "lang": "ru-RU",
                 "voice": "marina",
                 "emotion": "friendly",
-                "speed": "1.4",
+                "speed": "0.75",
                 "format": "oggopus",
             },
             "timeout": 12,
@@ -568,7 +568,7 @@ async def test_yandex_tts_uses_custom_voice_settings(monkeypatch):
 
     assert calls[0]["voice"] == "ermil"
     assert calls[0]["emotion"] == "good"
-    assert calls[0]["speed"] == "1.2"
+    assert calls[0]["speed"] == "0.75"
     assert calls[0]["format"] == "oggopus"
 
     await cleanup_temp_file(result.file_path, reason="test_cleanup")
@@ -619,5 +619,5 @@ async def test_yandex_tts_logs_error_settings_without_api_key(monkeypatch, caplo
     assert record.body == "bad voice"
     assert record.voice == "alena"
     assert record.emotion == "good"
-    assert record.speed == "1.15"
+    assert record.speed == "0.75"
     assert "secret-key" not in caplog.text

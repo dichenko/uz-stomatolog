@@ -1,8 +1,12 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Final, Literal
 
 from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+TTS_SPEED_FACTOR: Final[float] = 0.75
+TTS_SPEED_FACTOR_TEXT: Final[str] = "0.75"
 
 
 class Settings(BaseSettings):
@@ -80,7 +84,7 @@ class Settings(BaseSettings):
     )
     openai_tts_timeout_ms: int = 60000
     openai_tts_max_chars: int = 4096
-    openai_tts_speed: float = 1.0
+    openai_tts_speed: float = TTS_SPEED_FACTOR
     openai_tts_instructions: str = ""
 
     aisha_api_key: SecretStr | None = None
@@ -95,7 +99,7 @@ class Settings(BaseSettings):
     aisha_tts_language: str = "uz"
     aisha_tts_model: str = "Gulnoza"
     aisha_tts_mood: str = "Neutral"
-    aisha_tts_speed: float = 1.0
+    aisha_tts_speed: float = TTS_SPEED_FACTOR
 
     yandex_speechkit_api_key: SecretStr | None = None
     yandex_tts_base_url: str = "https://tts.api.cloud.yandex.net"
@@ -103,7 +107,7 @@ class Settings(BaseSettings):
     yandex_tts_language: str = "ru-RU"
     yandex_tts_voice: str = "alena"
     yandex_tts_emotion: str = "good"
-    yandex_tts_speed: str = "1.15"
+    yandex_tts_speed: str = TTS_SPEED_FACTOR_TEXT
     yandex_tts_format: str = "oggopus"
     yandex_tts_timeout_ms: int = 60000
     yandex_tts_max_chars: int = 5000
@@ -116,7 +120,7 @@ class Settings(BaseSettings):
     azure_tts_language: str = "ru-RU"
     azure_tts_voice: str = "ru-RU-SvetlanaNeural"
     azure_tts_output_format: str = "ogg-24khz-16bit-mono-opus"
-    azure_tts_rate: str = "20%"
+    azure_tts_rate: str = TTS_SPEED_FACTOR_TEXT
     azure_tts_pitch: str = ""
     azure_tts_range: str = ""
     azure_tts_timeout_ms: int = 60000
@@ -133,6 +137,12 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str | None = None
     otel_service_name: str = "dental-telegram-bot"
+
+    def model_post_init(self, __context: Any) -> None:
+        object.__setattr__(self, "openai_tts_speed", TTS_SPEED_FACTOR)
+        object.__setattr__(self, "aisha_tts_speed", TTS_SPEED_FACTOR)
+        object.__setattr__(self, "yandex_tts_speed", TTS_SPEED_FACTOR_TEXT)
+        object.__setattr__(self, "azure_tts_rate", TTS_SPEED_FACTOR_TEXT)
 
 
 @lru_cache
