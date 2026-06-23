@@ -4,7 +4,6 @@ from typing import Any, Final, Literal
 from pydantic import SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 TTS_SPEED_FACTOR: Final[float] = 0.75
 TTS_SPEED_FACTOR_TEXT: Final[str] = "0.75"
 
